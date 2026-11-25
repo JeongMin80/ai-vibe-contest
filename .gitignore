@@ -1,0 +1,38 @@
+# 의존성
+/node_modules
+/.pnp
+.pnp.*
+
+# 테스트
+/coverage
+
+# Next.js 빌드 결과
+/.next/
+/out/
+/build
+
+# 환경변수 (비밀 키가 GitHub에 올라가지 않도록)
+.env*
+!.env.example
+
+# 공공데이터 원본 (용량이 커서 제외, 스크립트로 다시 받을 수 있음)
+data/raw/
+
+# 개발용 미리보기
+/preview/
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# 기타
+.DS_Store
+*.pem
+npm-debug.log*
+*.log
+
+# 로컬 개발 도구 설정
+/.claude/
