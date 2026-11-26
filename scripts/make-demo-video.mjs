@@ -1,12 +1,13 @@
 // 자막이 들어간 시연 영상 자동 만들기 (소리 없음)
 // 실행: npm run demo-video [사이트 주소]   (기본: https://hwanhangil.vercel.app) → docs/demo/hwanhangil-demo.mp4 (또는 .webm)
+// - 화면 불러오는 시간과 늦어짐 확인을 기다리는 시간은 줄여서, 실제 녹화 시간보다 영상이 짧을 수 있습니다.
 //
 // 방법
 // 1) Edge(화면 없이)를 휴대폰 크기로 열고, 화면이 바뀔 때마다 오는 화면 프레임(DevTools screencast)을 모읍니다.
 // 2) 사람이 쓰는 순서대로 버튼을 누르고, 길 안내는 실제 안심 경로를 따라 위치를 조금씩 옮겨 "걷는" 장면을 만듭니다.
 //    (경로는 앱과 같은 계산 코드 src/lib/routing.ts 로 미리 구합니다)
 // 3) 모은 프레임과 자막을 브라우저 안의 캔버스에 시간 순서대로 그리며 녹화(MediaRecorder)해 영상 파일로 만듭니다.
-//    ffmpeg 같은 프로그램을 따로 설치할 필요가 없습니다. 녹화는 실제 시간만큼 걸립니다(약 1분 30초).
+//    ffmpeg 같은 프로그램을 따로 설치할 필요가 없습니다. 녹화는 실제 시간만큼 걸립니다(약 3분).
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -64,25 +65,37 @@ on("Page.screencastFrame", (p) => {
 let step = 0;
 const caption = (title, sub = "") => captions.push({ t: Date.now() / 1000, step: ++step, title, sub });
 
-const go = async (path) => {
+// 화면 이동: 녹화를 잠시 멈추고, 지도와 배경 지도 조각(타일)이 다 그려진 뒤 다시 녹화 (불러오는 장면이 영상에 안 나오게)
+let recording = false;
+const skips = []; // 영상에서 빼는 시간 구간 [시작, 끝] (초)
+const SCREENCAST = { format: "jpeg", quality: 72, maxWidth: 720, maxHeight: 1600, everyNthFrame: 1 };
+const go = async (path, title, sub) => {
+  const s0 = Date.now() / 1000;
+  if (recording) await send("Page.stopScreencast");
   await goRaw(path, 300);
-  if (!path.startsWith("/about")) await waitFor(`document.querySelector('.leaflet-container')`, 20000, "지도 표시");
-  await sleep(600);
+  if (!path.startsWith("/about")) {
+    await waitFor(`document.querySelector('.leaflet-container')`, 20000, "지도 표시");
+    await waitFor(`[...document.querySelectorAll('.leaflet-tile')].every(t => t.classList.contains('leaflet-tile-loaded'))`, 15000, "배경 지도").catch(() => {});
+  }
+  await sleep(800);
+  if (recording) skips.push([s0, Date.now() / 1000]);
+  if (title) caption(title, sub);
+  if (recording) await send("Page.startScreencast", SCREENCAST);
 };
 const radio = (group, label) =>
   run(`[...document.querySelectorAll('[role=radiogroup][aria-label="${group}"] [role=radio]')].find(b => b.textContent.includes(${JSON.stringify(label)})).click();`);
 
 try {
   await go("/");
-  await send("Page.startScreencast", { format: "jpeg", quality: 72, maxWidth: 720, maxHeight: 1600, everyNthFrame: 1 });
+  await send("Page.startScreencast", SCREENCAST);
+  recording = true;
   caption("환한길 · 밤길 안심 경로", "가장 빠른 길이 아니라, 가장 밝은 길로 집까지");
   await sleep(3500);
   caption("공공데이터로 만든 밤길 지도", "CCTV(파랑) · 보안등(주황) · 큰길 조명(노란 빛) · 안전비상벨(빨강)");
   await run(`document.querySelector('.leaflet-control-zoom-in')?.click();`);
   await sleep(4000);
 
-  caption("출발·도착을 고르면 안심 경로", "색깔 선 = 안심 경로(초록 밝음 → 빨강 어두움), 회색 점선 = 최단 경로");
-  await go(ROUTE);
+  await go(ROUTE, "출발·도착을 고르면 안심 경로", "색깔 선 = 안심 경로(초록 밝음 → 빨강 어두움), 회색 점선 = 최단 경로");
   await waitFor(`document.querySelector('[aria-live=polite] p')`, 20000, "경로 결과");
   await sleep(2500);
   await run(`document.querySelector('[aria-live=polite]')?.scrollIntoView({ block: 'start', behavior: 'smooth' });`);
@@ -110,7 +123,26 @@ try {
   await sleep(4500);
 
   caption("걷는 동안 음성·진동으로 알려 줘요", "어두운 길 60m 앞 · 경로에서 벗어남 · 도착 — 휴대폰을 주머니에 넣어도 OK");
-  for (let i = quarter; i < WALK.length; i++) {
+  const half = Math.round(WALK.length * 0.55);
+  for (let i = quarter; i < half; i++) {
+    await run(`window.__move(${WALK[i][0]}, ${WALK[i][1]});`);
+    await sleep(150);
+  }
+
+  // 늦어짐 확인: 시계를 30분 앞당겨 "괜찮으세요?"가 뜨게 함 (기다리는 시간은 영상에서 줄어듦)
+  caption("⏰ 예상보다 한참 늦어지면", "휴대폰이 먼저 \"괜찮으세요?\" — 소리·진동, 버튼 하나로 가족에게 지금 위치");
+  await sleep(2000);
+  const w0 = Date.now() / 1000;
+  await run(`window.__off = 30 * 60_000;`);
+  await waitFor(`document.body.innerText.includes('괜찮으세요')`, 40000, "늦어짐 확인");
+  skips.push([w0, Date.now() / 1000 - 0.3]);
+  await sleep(3500);
+  await click("괜찮아요");
+  await run(`window.__off = 0;`);
+  await sleep(800);
+
+  caption("다시 걸어서 도착까지", "앞으로 밝은 길 · 남은 거리와 시간");
+  for (let i = half; i < WALK.length; i++) {
     await run(`window.__move(${WALK[i][0]}, ${WALK[i][1]});`);
     await sleep(150);
   }
@@ -122,26 +154,22 @@ try {
   caption("도착하면 📨 도착 알리기 한 번", `"${(await run(`return window.__copied ?? '';`)).replace("[환한길] ", "")}"`);
   await sleep(4000);
 
-  caption("🆘 불안할 때: 가까운 안전한 곳", "가장 가까운 지구대 · 24시 편의점 · 안전비상벨까지 안심 경로, 112 바로 걸기");
-  await go("/");
+  await go("/", "🆘 불안할 때: 가까운 안전한 곳", "가장 가까운 지구대 · 24시 편의점 · 안전비상벨까지 안심 경로, 112 바로 걸기");
   await click("주변");
   await waitFor(`document.querySelectorAll('section[aria-label] li').length >= 3`, 15000, "주변 목록");
   await sleep(5000);
 
-  caption("전주 · 군산 · 제주 대학가", "같은 방법으로 지역을 넓힐 수 있어요 (군산: 어두운 길 540m 줄임)");
-  await go(`/?f=35.94693,126.68034,국립군산대&t=35.96,126.695,나운동&l=mid`);
+  await go(`/?f=35.94693,126.68034,국립군산대&t=35.96,126.695,나운동&l=mid`, "전주 · 군산 · 제주 대학가", "군산: 거의 같은 시간에 어두운 길 540m 줄임 — 지도에 \"피함\" 표시");
   await sleep(4000);
-  await go(`/?f=33.4547,126.56034,제주대학교&t=33.488,126.53,제주시내&l=mid`);
+  await go(`/?f=33.4547,126.56034,제주대학교&t=33.488,126.53,제주시내&l=mid`, "제주대학교 주변도", "같은 스크립트로 데이터를 만들어 지역을 넓혀요");
   await sleep(3500);
 
-  caption("데이터 출처와 한계도 숨기지 않아요", "공공데이터 출처 · 갱신 시점 · 추정한 부분을 그대로 공개");
-  await go("/about");
-  for (let y = 0; y < 6; y++) {
+  await go("/about", "데이터 출처와 한계도 숨기지 않아요", "공공데이터 출처 · 추정한 부분 · 위치 정보 · 만든 과정까지 공개");
+  for (let y = 0; y < 10; y++) {
     await run(`window.scrollBy({ top: 260, behavior: 'smooth' });`);
     await sleep(800);
   }
-  caption("환한길 · hwanhangil.vercel.app", "앱 설치·로그인 없이 휴대폰 브라우저에서 바로");
-  await go("/");
+  await go("/", "환한길 · hwanhangil.vercel.app", "앱 설치·로그인 없이 휴대폰 브라우저에서 바로");
   await sleep(3500);
   await send("Page.stopScreencast");
   await sleep(300);
@@ -150,7 +178,7 @@ try {
   // ---- 3) 캔버스에 그려 영상으로 녹화 ----
   await send("Page.navigate", { url: "about:blank" });
   await sleep(800);
-  await run(`window.__f = []; window.__c = ${JSON.stringify(captions)};`);
+  await run(`window.__f = []; window.__c = ${JSON.stringify(captions)}; window.__s = ${JSON.stringify(skips)};`);
   const t0 = frames[0].t;
   for (let i = 0; i < frames.length; i += 15) {
     const chunk = frames.slice(i, i + 15).map((f) => ({ t: f.t, d: f.data }));
@@ -184,7 +212,11 @@ try {
         wrap(cap.sub, W - 56).slice(0, 2).forEach((l, i) => ctx.fillText(l, 28, VH + 128 + i * 32));
       }
     };
-    const ev = [...F.map(f => ({ t: f.t, d: f.d })), ...C.map(c => ({ t: c.t, c }))].sort((a, b) => a.t - b.t);
+    const ev0 = [...F.map(f => ({ t: f.t, d: f.d })), ...C.map(c => ({ t: c.t, c }))].sort((a, b) => a.t - b.t);
+    // 화면 불러오는 시간과 늦어짐 확인을 기다리는 30초는 영상에서 0.3초로 줄임
+    const S = window.__s;
+    const adj = (t) => { let out = t; for (const [a, b] of S) { if (t >= b) out -= (b - a) - 0.3; else if (t > a) out -= (t - a) * (1 - 0.3 / (b - a)); } return out; };
+    const ev = ev0.map((e) => ({ ...e, t: adj(e.t) }));
     const start = ev[0].t;
     rec.start(1000);
     const wall0 = performance.now();
