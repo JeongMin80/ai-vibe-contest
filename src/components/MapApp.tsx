@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { LAYERS, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
+import { LAYERS, SERVICE_AREA, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
 import { FLAG_STREETLIGHT, distM, findRoute, loadGraph, nearestNode, sameRoute, type Graph, type Route } from "@/lib/routing";
 import { ARRIVE_M, OFF_ROUTE_M, buildLine, darkAhead, locate, segmentAt, type RouteLine } from "@/lib/navigation";
 import NavPanel, { type NavState } from "./NavPanel";
@@ -25,6 +25,8 @@ import { isNight } from "@/lib/sun";
 import NightToggle from "./NightToggle";
 import Onboarding from "./Onboarding";
 import SafeNearby from "./SafeNearby";
+import ReportPanel from "./ReportPanel";
+import { fetchReports, reportPenalties, type Report } from "@/lib/reports";
 
 // Leaflet은 브라우저에서만 동작하므로 서버 렌더링을 끕니다.
 const MapView = dynamic(() => import("./MapView"), {
@@ -88,6 +90,14 @@ export default function MapApp() {
   const [locating, setLocating] = useState(false);
   /** 길 안내 중이면 상태, 아니면 null */
   const [nav, setNav] = useState<NavState | null>(null);
+  /** 시민 제보: 최근 제보 목록, 제보 작성 중 상태, 고마움 알림 */
+  const [reports, setReports] = useState<Report[]>([]);
+  const [reporting, setReporting] = useState<{
+    pos: { lat: number; lng: number } | null;
+    picking: boolean;
+    locating: boolean;
+  } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const graphPromise = useRef<Promise<Graph> | null>(null);
   // 비동기 콜백(현재 위치 등)에서도 최신 출발·도착을 보도록
   const fromRef = useRef<Point | null>(null);
@@ -113,6 +123,29 @@ export default function MapApp() {
       .then(setData)
       .catch((e: Error) => setMessage(e.message));
   }, []);
+
+  // 최근 시민 제보 (실패해도 지도·경로는 그대로 쓸 수 있게 조용히 넘어감)
+  const loadReports = useCallback(() => {
+    fetchReports(SERVICE_AREA)
+      .then(setReports)
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
+
+  const locateForReport = () => {
+    if (!("geolocation" in navigator)) return;
+    setReporting((r) => r && { ...r, locating: true, picking: false });
+    navigator.geolocation.getCurrentPosition(
+      (p) => setReporting((r) => r && { ...r, locating: false, pos: { lat: p.coords.latitude, lng: p.coords.longitude } }),
+      () => {
+        setReporting((r) => r && { ...r, locating: false, picking: true });
+        setMessage("현재 위치를 찾지 못했어요. 지도에서 제보할 곳을 눌러 주세요.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const ensureGraph = useCallback(() => {
     if (!graphPromise.current) {
@@ -225,12 +258,17 @@ export default function MapApp() {
   const onMapPick = useCallback(
     (lat: number, lng: number) => {
       // 길 안내 중에는 지도를 눌러도 출발·도착이 바뀌지 않게
+      // 제보 위치를 고르는 중이면 그 위치로
+      if (reporting?.picking) {
+        setReporting({ ...reporting, pos: { lat, lng }, picking: false });
+        return;
+      }
       if (mode !== "route" || nav) return;
       const field: Field | null = picking ?? (!from ? "from" : !to ? "to" : null);
       if (!field) return;
       void setPoint(field, lat, lng, "지도에서 고른 곳");
     },
-    [mode, nav, picking, from, to, setPoint]
+    [mode, nav, picking, from, to, setPoint, reporting]
   );
 
   const locateMe = (field: Field) => {
@@ -261,17 +299,20 @@ export default function MapApp() {
     setTo(from);
   };
 
+  // 제보 근처 길의 비용 배수 (어두움·고장·불안은 안심 경로만, 공사는 모든 경로)
+  const penalties = useMemo(() => (graph && reports.length ? reportPenalties(graph, reports) : undefined), [graph, reports]);
+
   // 경로 계산 (출발·도착·안전 정도가 바뀔 때마다)
   const routes = useMemo(() => {
     if (!graph || !from || !to) return null;
     const a = nearestNode(graph, from.lat, from.lng);
     const b = nearestNode(graph, to.lat, to.lng);
     if (!a || !b) return null;
-    const short = findRoute(graph, a.node, b.node, 0);
-    const safe = findRoute(graph, a.node, b.node, LEVEL_WEIGHT[level], { night });
+    const short = findRoute(graph, a.node, b.node, 0, { penalties });
+    const safe = findRoute(graph, a.node, b.node, LEVEL_WEIGHT[level], { night, penalties });
     if (!short || !safe) return { short: null, safe: null, same: false, failed: true };
     return { short, safe, same: sameRoute(short, safe), failed: false };
-  }, [graph, from, to, level, night]);
+  }, [graph, from, to, level, night, penalties]);
 
   // 큰길 조명(추정)은 도로 데이터에서 계산한 구간 수
   const streetLitCount = useMemo(
@@ -450,7 +491,9 @@ export default function MapApp() {
         safe={mode === "route" ? shownSafe : null}
         short={mode === "route" ? shownShort : null}
         onPick={onMapPick}
-        picking={mode === "route" && picking !== null && !nav}
+        picking={(mode === "route" && picking !== null && !nav) || !!reporting?.picking}
+        reports={reports}
+        mark={reporting?.pos ?? null}
         // 길 안내 중이거나 "가까운 안전한 곳"을 열었을 때 내 위치를 보여줌
         me={nav?.me ?? (safe?.origin ? { ...safe.origin, acc: 20 } : null)}
         follow={nav ? nav.follow : !!safe?.origin}
@@ -480,7 +523,23 @@ export default function MapApp() {
         className="absolute inset-x-0 bottom-0 z-[1000] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:inset-x-auto md:bottom-auto md:left-0 md:top-16 md:w-[400px]"
       >
         <div className="mx-auto max-h-[55dvh] max-w-xl overflow-y-auto rounded-3xl border border-line bg-panel/95 p-4 shadow-2xl backdrop-blur md:max-h-[calc(100dvh-5.5rem)]">
-          {safe ? (
+          {reporting ? (
+            <ReportPanel
+              pos={reporting.pos}
+              picking={reporting.picking}
+              locating={reporting.locating}
+              onPickOnMap={() => setReporting((r) => r && { ...r, picking: true })}
+              onLocate={locateForReport}
+              onDone={(sent) => {
+                setReporting(null);
+                if (sent) {
+                  setNotice("제보 고마워요! 14일 동안 지도에 보이고 안심 경로에 반영돼요.");
+                  setTimeout(() => setNotice(null), 5000);
+                  loadReports();
+                }
+              }}
+            />
+          ) : safe ? (
             <SafeNearby
               origin={safe.origin}
               locating={safe.locating}
@@ -534,6 +593,16 @@ export default function MapApp() {
                   🆘 주변 · 112
                 </button>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setMessage(null);
+                  setReporting({ pos: null, picking: false, locating: false });
+                }}
+                className="mt-2 w-full text-center text-xs text-muted underline underline-offset-2"
+              >
+                ⚠ 어두운 곳·고장 난 가로등 제보하기{reports.length ? ` · 최근 ${reports.length}건` : ""}
+              </button>
 
               {/* 지도 표시: 작게 */}
               <div className="mt-3 flex items-center justify-between gap-2">
@@ -664,6 +733,11 @@ export default function MapApp() {
             </>
           )}
 
+          {notice && (
+            <p role="status" className="mt-3 rounded-xl bg-safe/15 px-3 py-2 text-xs text-safe">
+              {notice}
+            </p>
+          )}
           {message && (
             <p role="alert" className="mt-3 rounded-xl bg-danger/15 px-3 py-2 text-xs text-danger">
               {message}

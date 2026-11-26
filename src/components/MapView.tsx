@@ -5,6 +5,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { PLACES, SERVICE_AREA, type FacilityData, type LayerId } from "@/lib/facilities";
 import { FLAG_STREETLIGHT, scoreColor, type Graph, type Route } from "@/lib/routing";
+import { REPORT_KINDS, type Report } from "@/lib/reports";
 
 export interface Point {
   lat: number;
@@ -29,7 +30,17 @@ interface Props {
   follow?: boolean;
   /** 사용자가 지도를 직접 끌었을 때 (따라가기 해제용) */
   onUserMove?: () => void;
+  /** 최근 시민 제보 */
+  reports?: Report[];
+  /** 제보하려고 고른 위치 */
+  mark?: { lat: number; lng: number } | null;
 }
+
+function ago(iso: string) {
+  const h = Math.round((Date.now() - new Date(iso).getTime()) / 3600e3);
+  return h < 1 ? "방금" : h < 24 ? `${h}시간 전` : `${Math.round(h / 24)}일 전`;
+}
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 /** 보안등은 이 확대 수준부터 보여줌 */
 const LAMP_MIN_ZOOM = 15;
@@ -50,7 +61,7 @@ function pinIcon(letter: string, color: string) {
   });
 }
 
-export default function MapView({ data, graph, visible, from, to, safe, short, onPick, picking, me, follow, onUserMove }: Props) {
+export default function MapView({ data, graph, visible, from, to, safe, short, onPick, picking, me, follow, onUserMove, reports, mark }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const groupsRef = useRef<Partial<Record<LayerId, L.LayerGroup>>>({});
@@ -60,6 +71,7 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
   const onPickRef = useRef(onPick);
   const onUserMoveRef = useRef(onUserMove);
   const meLayerRef = useRef<L.LayerGroup | null>(null);
+  const reportLayerRef = useRef<L.LayerGroup | null>(null);
   useEffect(() => {
     onPickRef.current = onPick;
     onUserMoveRef.current = onUserMove;
@@ -119,6 +131,8 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
     map.on("dragstart", () => onUserMoveRef.current?.());
     map.on("zoomend", () => setZoom(map.getZoom()));
     meLayerRef.current = L.layerGroup().addTo(map);
+    // 지도와 함께 만들어야 지도가 다시 만들어져도(개발 모드의 StrictMode 등) 새 지도에 붙습니다
+    reportLayerRef.current = L.layerGroup().addTo(map);
 
     mapRef.current = map;
     return () => {
@@ -248,6 +262,38 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
       map.panTo(center, { animate: true });
     }
   }, [me, follow]);
+
+  // 시민 제보 표시 (메모는 사용자가 쓴 글이라 HTML로 해석되지 않게 이스케이프)
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = reportLayerRef.current;
+    if (!map || !layer) return;
+    layer.clearLayers();
+    for (const r of reports ?? []) {
+      const k = REPORT_KINDS.find((x) => x.id === r.kind);
+      L.marker([r.lat, r.lng], {
+        pane: "routePane",
+        icon: L.divIcon({
+          className: "",
+          html: `<div style="width:26px;height:26px;border-radius:50%;background:#1b2542;border:2px solid #fbbf24;display:grid;place-items:center;font-size:13px">${k?.icon ?? "⚠️"}</div>`,
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        }),
+      })
+        .bindPopup(`<b>${k?.label ?? "제보"}</b> · ${ago(r.created_at)}${r.note ? `<br>${escapeHtml(r.note)}` : ""}`)
+        .addTo(layer);
+    }
+    if (mark) {
+      L.circleMarker([mark.lat, mark.lng], { pane: "mePane", radius: 10, color: "#fbbf24", weight: 3, fillOpacity: 0.3 })
+        .bindTooltip("제보할 위치", { permanent: true, direction: "top", className: "place-label" })
+        .addTo(layer);
+      // 패널에 가리지 않게 (휴대폰은 위쪽, 넓은 화면은 패널 오른편)
+      const zoom = map.getZoom();
+      const wide = window.innerWidth >= 768;
+      const offset = wide ? L.point(-200, 0) : L.point(0, Math.round(window.innerHeight * 0.22));
+      map.panTo(map.unproject(map.project([mark.lat, mark.lng], zoom).add(offset), zoom));
+    }
+  }, [reports, mark]);
 
   // 출발·도착 핀
   useEffect(() => {

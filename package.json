@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --no-warnings scripts/test-routing.mjs && node --experimental-strip-types --no-warnings scripts/test-places.mjs && node --experimental-strip-types --no-warnings scripts/test-nav.mjs && node --experimental-strip-types --no-warnings scripts/test-share.mjs && node --experimental-strip-types --no-warnings scripts/test-night.mjs",
+    "test": "node --experimental-strip-types --no-warnings scripts/test-routing.mjs && node --experimental-strip-types --no-warnings scripts/test-places.mjs && node --experimental-strip-types --no-warnings scripts/test-nav.mjs && node --experimental-strip-types --no-warnings scripts/test-share.mjs && node --experimental-strip-types --no-warnings scripts/test-night.mjs && node --experimental-strip-types --no-warnings scripts/test-reports.mjs",
     "data:facilities": "node scripts/build-facilities.mjs",
     "data:graph": "node scripts/build-graph.mjs"
   },

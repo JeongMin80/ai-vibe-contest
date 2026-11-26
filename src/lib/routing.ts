@@ -244,6 +244,8 @@ const WALK_M_PER_MIN = 75;
 export interface RouteOptions {
   /** 밤이면 조명 없는 산길·공원길을 더 피함 (안전가중치가 0이 아닐 때만) */
   night?: boolean;
+  /** 시민 제보 반영: 길 번호 → 비용 배수. safe 는 안심 경로에만, all 은 최단 경로에도 */
+  penalties?: { safe: Map<number, number>; all: Map<number, number> };
 }
 
 /** 밤에 조명 없는 산길·공원길의 비용 배수 */
@@ -257,6 +259,7 @@ function isDarkTrail(g: Graph, flags: number, hw: number) {
 
 export function findRoute(g: Graph, from: number, to: number, safetyWeight: number, opts: RouteOptions = {}): Route | null {
   const nightPenalty = opts.night && safetyWeight > 0;
+  const penalties = opts.penalties;
   const n = g.nodeCount;
   const dist = new Float64Array(n).fill(Infinity);
   const prevEdge = new Int32Array(n).fill(-1);
@@ -276,6 +279,7 @@ export function findRoute(g: Graph, from: number, to: number, safetyWeight: numb
       const e = edges[ei];
       let cost = edgeCost(e[2], e[3], safetyWeight);
       if (nightPenalty && isDarkTrail(g, e[5], e[6])) cost *= NIGHT_TRAIL_PENALTY;
+      if (penalties) cost *= (safetyWeight > 0 ? penalties.safe.get(ei) : penalties.all.get(ei)) ?? 1;
       const nd = d + cost;
       if (nd < dist[v]) {
         dist[v] = nd;
