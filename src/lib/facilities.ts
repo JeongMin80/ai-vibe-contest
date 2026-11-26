@@ -32,8 +32,11 @@ export async function loadFacilities(): Promise<FacilityData> {
   return res.json();
 }
 
-/** 지도에서 바로 고를 수 있는 주요 장소 */
+/** 지도에서 바로 고를 수 있는 주요 장소 (OpenStreetMap 캠퍼스 경계의 중심점) */
 export const PLACES = [
-  { name: "전북대학교", lat: 35.8468, lng: 127.1294 },
-  { name: "전주교육대학교", lat: 35.8068, lng: 127.1508 },
+  { name: "전북대학교", lat: 35.84663, lng: 127.13391 },
+  { name: "전주교육대학교", lat: 35.80843, lng: 127.15467 },
 ] as const;
+
+/** 서비스 지역 (도로망을 받은 범위) */
+export const SERVICE_AREA = { south: 35.795, west: 127.105, north: 35.865, east: 127.17 };
