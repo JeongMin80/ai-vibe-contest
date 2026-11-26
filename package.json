@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-strip-types --no-warnings scripts/test-routing.mjs && node --experimental-strip-types --no-warnings scripts/test-places.mjs && node --experimental-strip-types --no-warnings scripts/test-nav.mjs && node --experimental-strip-types --no-warnings scripts/test-share.mjs && node --experimental-strip-types --no-warnings scripts/test-night.mjs && node --experimental-strip-types --no-warnings scripts/test-reports.mjs && node --experimental-strip-types --no-warnings scripts/test-regions.mjs && node --experimental-strip-types --no-warnings scripts/test-voice.mjs",
+    "check:live": "node scripts/check-live.mjs",
+    "screens": "node scripts/make-screens.mjs",
     "data:facilities": "node scripts/build-facilities.mjs",
     "data:graph": "node scripts/build-graph.mjs"
   },
