@@ -1,0 +1,94 @@
+<!doctype html>
+<!-- 공유 미리보기 이미지(1200×630) 원본. scripts/make-og.mjs 가 Edge로 찍어서 src/app/opengraph-image.png 로 저장합니다. -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg: #0b1020; --panel: #131b31; --line: #2a3658; --text: #eef2ff; --muted: #9aa6c7; --accent: #ffd166; --safe: #34d399; --cctv: #4ea8ff; --bell: #ff5d6c; }
+  * { margin: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; background: var(--bg); }
+  body { font-family: "Noto Sans KR", "Malgun Gothic", sans-serif; color: var(--text); position: relative; }
+  svg.map { position: absolute; inset: 0; }
+  .copy { position: absolute; left: 72px; top: 0; bottom: 0; width: 600px; display: flex; flex-direction: column; justify-content: center; }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .dot { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 36px 8px rgba(255, 209, 102, .55); }
+  h1 { font-size: 104px; font-weight: 800; letter-spacing: -3px; line-height: 1; }
+  .sub { margin-top: 26px; font-size: 44px; font-weight: 700; line-height: 1.3; letter-spacing: -1px; }
+  .sub em { font-style: normal; color: var(--accent); }
+  .desc { margin-top: 22px; font-size: 25px; color: var(--muted); line-height: 1.5; }
+  .chips { margin-top: 34px; display: flex; gap: 12px; }
+  .chip { display: flex; align-items: center; gap: 10px; border: 2px solid var(--line); background: rgba(19, 27, 49, .9); border-radius: 999px; padding: 9px 20px; font-size: 22px; font-weight: 500; }
+  .chip i { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+  .url { position: absolute; right: 56px; bottom: 40px; font-size: 22px; color: var(--muted); letter-spacing: .5px; }
+</style>
+</head>
+<body>
+  <svg class="map" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="fade" x1="0" x2="1">
+        <stop offset="0" stop-color="#0b1020" stop-opacity="1"/>
+        <stop offset=".4" stop-color="#0b1020" stop-opacity=".9"/>
+        <stop offset=".58" stop-color="#0b1020" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="10"/></filter>
+      <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4"/></filter>
+    </defs>
+    <!-- 골목길 (어두운 길) -->
+    <g stroke="#1e2846" stroke-width="10" fill="none" stroke-linecap="round">
+      <path d="M560 80 L1180 40"/><path d="M540 210 L1190 170"/><path d="M600 330 L1200 300"/>
+      <path d="M560 460 L1190 430"/><path d="M620 590 L1200 560"/>
+      <path d="M700 0 L760 630"/><path d="M860 0 L900 630"/><path d="M1020 0 L1040 630"/><path d="M1140 0 L1150 630"/>
+      <path d="M780 120 Q840 260 800 400"/><path d="M930 360 Q990 470 1090 500"/>
+    </g>
+    <!-- 큰길 (가로등이 있는 밝은 길) -->
+    <g fill="none" stroke-linecap="round">
+      <path d="M520 520 L1200 470" stroke="#ffe27a" stroke-opacity=".12" stroke-width="30"/>
+      <path d="M520 520 L1200 470" stroke="#ffe27a" stroke-opacity=".35" stroke-width="7"/>
+      <path d="M960 0 L985 630" stroke="#ffe27a" stroke-opacity=".12" stroke-width="30"/>
+      <path d="M960 0 L985 630" stroke="#ffe27a" stroke-opacity=".35" stroke-width="7"/>
+    </g>
+    <!-- 최단 경로 (어두운 지름길, 점선) -->
+    <path d="M760 540 Q790 330 880 250 T1080 110" fill="none" stroke="#8b9cc9" stroke-width="6" stroke-dasharray="4 14" stroke-linecap="round" opacity=".75"/>
+    <!-- 안심 경로 (빛나는 길) -->
+    <path id="safe" d="M760 540 L760 506 L975 490 L968 300 L1080 292 L1080 110" fill="none" stroke="#34d399" stroke-width="26" stroke-linejoin="round" stroke-linecap="round" filter="url(#glow)" opacity=".55"/>
+    <path d="M760 540 L760 506 L975 490 L968 300 L1080 292 L1080 110" fill="none" stroke="#34d399" stroke-width="11" stroke-linejoin="round" stroke-linecap="round"/>
+    <!-- 보안등 -->
+    <g fill="#ffb020">
+      <circle cx="840" cy="487" r="6"/><circle cx="900" cy="482" r="6"/><circle cx="992" cy="420" r="6"/><circle cx="990" cy="350" r="6"/>
+      <circle cx="1030" cy="276" r="6"/><circle cx="1100" cy="220" r="6"/><circle cx="1100" cy="150" r="6"/>
+      <circle cx="1170" cy="300" r="5" opacity=".7"/><circle cx="640" cy="350" r="5" opacity=".6"/><circle cx="700" cy="180" r="5" opacity=".6"/>
+    </g>
+    <g fill="#ffb020" filter="url(#soft)" opacity=".8">
+      <circle cx="840" cy="487" r="12"/><circle cx="900" cy="482" r="12"/><circle cx="992" cy="420" r="12"/><circle cx="990" cy="350" r="12"/>
+      <circle cx="1030" cy="276" r="12"/><circle cx="1100" cy="220" r="12"/><circle cx="1100" cy="150" r="12"/>
+    </g>
+    <!-- CCTV -->
+    <g fill="#4ea8ff" stroke="#0b1020" stroke-width="2">
+      <circle cx="950" cy="510" r="10"/><circle cx="945" cy="300" r="10"/><circle cx="1060" cy="120" r="10"/><circle cx="1160" cy="420" r="9"/>
+    </g>
+    <!-- 비상벨 -->
+    <g fill="#ff5d6c" stroke="#fff" stroke-width="3">
+      <circle cx="1000" cy="465" r="11"/><circle cx="1110" cy="300" r="11"/>
+    </g>
+    <!-- 출발·도착 -->
+    <g>
+      <circle cx="760" cy="540" r="22" fill="#ffd166" stroke="#0b1020" stroke-width="4"/>
+      <text x="760" y="549" text-anchor="middle" font-size="22" font-weight="700" fill="#1a1400" font-family="Noto Sans KR">출</text>
+      <circle cx="1080" cy="110" r="22" fill="#34d399" stroke="#0b1020" stroke-width="4"/>
+      <text x="1080" y="119" text-anchor="middle" font-size="22" font-weight="700" fill="#0b1020" font-family="Noto Sans KR">도</text>
+    </g>
+    <rect x="0" y="0" width="1200" height="630" fill="url(#fade)"/>
+  </svg>
+
+  <div class="copy">
+    <div class="brand"><span class="dot"></span><h1>환한길</h1></div>
+    <p class="sub">빠른 길 말고,<br><em>환하고 안전한 길</em>로.</p>
+    <p class="desc">CCTV·보안등·안전비상벨 공공데이터로<br>밤길 귀갓길을 더 안전하게 안내해요.</p>
+    <div class="chips">
+      <span class="chip"><i style="background: var(--safe)"></i>안심 경로</span>
+      <span class="chip"><i style="background: var(--accent)"></i>전주 · 군산 · 제주</span>
+    </div>
+  </div>
+  <p class="url">hwanhangil.vercel.app</p>
+</body>
+</html>
