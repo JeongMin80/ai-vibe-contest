@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LAYERS, PLACES, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
 import { FLAG_STREETLIGHT, findRoute, loadGraph, nearestNode, sameRoute, type Graph, type Route } from "@/lib/routing";
 import type { Point } from "./MapView";
+import PlaceField from "./PlaceField";
 import RouteResult from "./RouteResult";
 
 // Leaflet은 브라우저에서만 동작하므로 서버 렌더링을 끕니다.
@@ -251,39 +252,18 @@ export default function MapApp() {
                 <div className="flex-1 space-y-2">
                   {(["from", "to"] as const).map((field) => {
                     const p = field === "from" ? from : to;
-                    const active = picking === field;
                     return (
-                      <div
+                      <PlaceField
                         key={field}
-                        className={`flex items-center gap-2 rounded-2xl border px-3 py-2 ${
-                          active ? "border-accent bg-panel-2" : "border-line bg-panel-2/60"
-                        }`}
-                      >
-                        <span
-                          className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-bg ${
-                            field === "from" ? "bg-accent" : "bg-safe"
-                          }`}
-                          aria-hidden
-                        >
-                          {field === "from" ? "출" : "도"}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setPicking(field)}
-                          className="min-w-0 flex-1 truncate text-left text-sm"
-                          aria-label={`${field === "from" ? "출발지" : "도착지"} 지도에서 고르기`}
-                        >
-                          {p ? p.label : <span className="text-muted">{field === "from" ? "출발지" : "도착지"} · 지도에서 고르기</span>}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => locateMe(field)}
-                          disabled={locating}
-                          className="shrink-0 rounded-lg border border-line px-2 py-1 text-[11px] text-muted disabled:opacity-50"
-                        >
-                          {locating ? "찾는 중" : "현재 위치"}
-                        </button>
-                      </div>
+                        field={field}
+                        label={p?.label ?? null}
+                        active={picking === field}
+                        locating={locating}
+                        onFocus={() => setPicking(field)}
+                        // 검색 결과 좌표는 저장하지 않고, 가장 가까운 OSM 길 위의 점으로 바꿔서 씁니다
+                        onSelect={(r) => void setPoint(field, r.lat, r.lng, r.name)}
+                        onLocate={() => locateMe(field)}
+                      />
                     );
                   })}
                 </div>
