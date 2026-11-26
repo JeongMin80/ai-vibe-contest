@@ -35,6 +35,8 @@ export interface Graph {
   adjEdge: Int32Array;
   /** 가까운 교차점 찾기용 격자 */
   grid: Map<string, number[]>;
+  /** 산길·공원길처럼 밤에 어두운 길 종류의 번호 (path, steps, track) */
+  trailHw: Set<number>;
 }
 
 const CELL = 0.002; // 약 200m
@@ -112,7 +114,8 @@ export function buildGraph(input: RawGraph): Graph {
     if (!list) grid.set(k, (list = []));
     list.push(i);
   }
-  return { raw, nodeCount: n, lat, lng, adjStart, adjNode, adjEdge, grid };
+  const trailHw = new Set(raw.hwTypes.map((h, i) => (TRAIL_TYPES.includes(h) ? i : -1)).filter((i) => i >= 0));
+  return { raw, nodeCount: n, lat, lng, adjStart, adjNode, adjEdge, grid, trailHw };
 }
 
 const R = 6371000;
@@ -207,6 +210,8 @@ export interface RouteSegment {
   score: number;
   cctv: number;
   flags: number;
+  /** 조명 없는 산길·공원길(path/steps/track)인지 */
+  trail: boolean;
 }
 
 export interface Route {
@@ -229,12 +234,29 @@ export interface Route {
   cctvNear: number;
   /** 경로 100m 안 비상벨이 있는 구간 수 */
   bellSegments: number;
+  /** 조명 없는 산길·공원길을 지나는 길이 */
+  trailLength: number;
 }
 
 export const DARK_SCORE = 35;
 const WALK_M_PER_MIN = 75;
 
-export function findRoute(g: Graph, from: number, to: number, safetyWeight: number): Route | null {
+export interface RouteOptions {
+  /** 밤이면 조명 없는 산길·공원길을 더 피함 (안전가중치가 0이 아닐 때만) */
+  night?: boolean;
+}
+
+/** 밤에 조명 없는 산길·공원길의 비용 배수 */
+export const NIGHT_TRAIL_PENALTY = 3;
+const TRAIL_TYPES = ["path", "steps", "track"];
+
+/** 조명(보안등·큰길 가로등)이 없는 산길·공원길·계단인지 */
+function isDarkTrail(g: Graph, flags: number, hw: number) {
+  return g.trailHw.has(hw) && !(flags & (FLAG_LAMP | FLAG_STREETLIGHT));
+}
+
+export function findRoute(g: Graph, from: number, to: number, safetyWeight: number, opts: RouteOptions = {}): Route | null {
+  const nightPenalty = opts.night && safetyWeight > 0;
   const n = g.nodeCount;
   const dist = new Float64Array(n).fill(Infinity);
   const prevEdge = new Int32Array(n).fill(-1);
@@ -252,7 +274,9 @@ export function findRoute(g: Graph, from: number, to: number, safetyWeight: numb
       const v = g.adjNode[k];
       const ei = g.adjEdge[k];
       const e = edges[ei];
-      const nd = d + edgeCost(e[2], e[3], safetyWeight);
+      let cost = edgeCost(e[2], e[3], safetyWeight);
+      if (nightPenalty && isDarkTrail(g, e[5], e[6])) cost *= NIGHT_TRAIL_PENALTY;
+      const nd = d + cost;
       if (nd < dist[v]) {
         dist[v] = nd;
         prevEdge[v] = ei;
@@ -274,7 +298,7 @@ export function findRoute(g: Graph, from: number, to: number, safetyWeight: numb
   edgeSeq.reverse();
 
   const segments: RouteSegment[] = edgeSeq.map((ei, i) => {
-    const [u, v, len, score, cctv, flags, , geom] = edges[ei];
+    const [u, v, len, score, cctv, flags, hw, geom] = edges[ei];
     const mid: [number, number][] = [];
     for (let j = 0; j < geom.length; j += 2) mid.push([geom[j], geom[j + 1]]);
     const start = nodes[i];
@@ -282,7 +306,7 @@ export function findRoute(g: Graph, from: number, to: number, safetyWeight: numb
     const a: [number, number] = [g.lat[u], g.lng[u]];
     const b: [number, number] = [g.lat[v], g.lng[v]];
     const path = forward ? [a, ...mid, b] : [b, ...mid.reverse(), a];
-    return { edge: ei, path, len, score, cctv, flags };
+    return { edge: ei, path, len, score, cctv, flags, trail: isDarkTrail(g, flags, hw) };
   });
 
   return summarize(nodes, segments);
@@ -296,6 +320,7 @@ function summarize(nodes: number[], segments: RouteSegment[]): Route {
   let darkLength = 0;
   let cctvNear = 0;
   let bellSegments = 0;
+  let trailLength = 0;
   const darkStretches: Route["darkStretches"] = [];
   let run: { from: [number, number]; length: number } | null = null;
 
@@ -306,6 +331,7 @@ function summarize(nodes: number[], segments: RouteSegment[]): Route {
     if (s.flags & (FLAG_LAMP | FLAG_STREETLIGHT)) litLen += s.len;
     cctvNear += s.cctv;
     if (s.flags & FLAG_BELL) bellSegments++;
+    if (s.trail) trailLength += s.len;
     const dark = s.score < DARK_SCORE && !(s.flags & FLAG_CAMPUS);
     if (dark) {
       darkLength += s.len;
@@ -331,6 +357,7 @@ function summarize(nodes: number[], segments: RouteSegment[]): Route {
     darkStretches,
     cctvNear,
     bellSegments,
+    trailLength,
   };
 }
 

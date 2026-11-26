@@ -21,6 +21,8 @@ import MyPlaces from "./MyPlaces";
 import PlaceField from "./PlaceField";
 import RouteResult from "./RouteResult";
 import { encodeShare, parseShare } from "@/lib/share";
+import { isNight } from "@/lib/sun";
+import NightToggle from "./NightToggle";
 import Onboarding from "./Onboarding";
 import SafeNearby from "./SafeNearby";
 
@@ -52,6 +54,15 @@ function getOnboarded() {
 }
 // 서버 렌더링 때는 숨겨 두고, 브라우저에서 처음 온 사람에게만 보여줍니다
 const getOnboardedServer = () => true;
+// 지금이 밤인지 (전주 일몰·일출 기준). 1분마다 다시 확인합니다. 서버 렌더링 때는 낮으로 둡니다.
+const JEONJU: [number, number] = [35.82, 127.15];
+function subscribeMinute(cb: () => void) {
+  const id = setInterval(cb, 60_000);
+  return () => clearInterval(id);
+}
+const getNightNow = () => isNight(new Date(), ...JEONJU);
+const getNightServer = () => false;
+
 function finishOnboarding() {
   onboardDismissed = true;
   try {
@@ -90,6 +101,10 @@ export default function MapApp() {
   const places = useSyncExternalStore(subscribePlaces, getPlacesSnapshot, getPlacesServerSnapshot);
   const home = places.find((p) => p.home) ?? null;
   const onboarded = useSyncExternalStore(subscribeOnboard, getOnboarded, getOnboardedServer);
+  // 밤 모드: 기본은 일몰·일출로 자동, 사용자가 누르면 그 값으로 고정
+  const nightNow = useSyncExternalStore(subscribeMinute, getNightNow, getNightServer);
+  const [nightOverride, setNightOverride] = useState<boolean | null>(null);
+  const night = nightOverride ?? nightNow;
   /** "어디로 가세요?"로 들어오면 도착지 검색칸에 바로 커서 */
   const [focusTo, setFocusTo] = useState(false);
 
@@ -253,10 +268,10 @@ export default function MapApp() {
     const b = nearestNode(graph, to.lat, to.lng);
     if (!a || !b) return null;
     const short = findRoute(graph, a.node, b.node, 0);
-    const safe = findRoute(graph, a.node, b.node, LEVEL_WEIGHT[level]);
+    const safe = findRoute(graph, a.node, b.node, LEVEL_WEIGHT[level], { night });
     if (!short || !safe) return { short: null, safe: null, same: false, failed: true };
     return { short, safe, same: sameRoute(short, safe), failed: false };
-  }, [graph, from, to, level]);
+  }, [graph, from, to, level, night]);
 
   // 큰길 조명(추정)은 도로 데이터에서 계산한 구간 수
   const streetLitCount = useMemo(
@@ -632,6 +647,8 @@ export default function MapApp() {
                   ))}
                 </div>
               </div>
+
+              <NightToggle night={night} auto={nightOverride === null} onToggle={() => setNightOverride(!night)} />
 
               {!graph && <p className="mt-3 text-xs text-muted">길 데이터를 불러오는 중…</p>}
               {routes?.failed && <p className="mt-3 text-sm text-danger">두 지점을 잇는 길을 찾지 못했어요.</p>}

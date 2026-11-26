@@ -54,6 +54,7 @@ function Card({ title, route, highlight }: { title: string; route: Route; highli
       <dl className="mt-2 space-y-1">
         <Stat label="조명 있는 구간" value={pct(route.litShare)} />
         <Stat label="CCTV 근처 구간" value={pct(route.cctvShare)} />
+        {route.trailLength > 0 && <Stat label="어두운 산길·공원길" value={meters(route.trailLength)} />}
         <Stat label="어두운 구간" value={meters(route.darkLength)} strong={highlight} />
       </dl>
     </div>
