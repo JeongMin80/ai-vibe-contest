@@ -110,6 +110,7 @@ export default function MapApp() {
   /** 늦어짐 확인("괜찮으세요?"): 안내 시작 시각, 예상 시간(분), 마지막으로 "괜찮아요"를 누른 시각 */
   const navClockRef = useRef<{ startedAt: number; expected: number; okAt: number | null } | null>(null);
   const [late, setLate] = useState(false);
+  const lateRef = useRef(false);
   /** 시민 제보: 최근 제보 목록, 제보 작성 중 상태, 고마움 알림 */
   const [reports, setReports] = useState<Report[]>([]);
   const [reporting, setReporting] = useState<{
@@ -581,6 +582,7 @@ ${url}` : text);
     setNav({ me: null, along: 0, offset: 0, offCount: 0, arrived: false, follow: true, error: null });
     spokenRef.current = new Set();
     navClockRef.current = { startedAt: Date.now(), expected: line ? Math.max(1, Math.round(line.total / 75)) : 15, okAt: null };
+    lateRef.current = false;
     setLate(false);
     // 버튼을 누른 순간에 말해야 아이폰(사파리)에서도 이후 음성 안내가 나옵니다
     if (voiceOn && line) speak(startText(to?.label ?? "도착지", line.total));
@@ -604,19 +606,20 @@ ${url}` : text);
       const c = navClockRef.current;
       if (!c) return;
       const ask = lateCheck(c.startedAt, c.expected, Date.now(), c.okAt);
-      setLate((was) => {
-        if (ask && !was && voiceOn) {
-          speak("예상보다 늦어지고 있어요. 괜찮으세요?");
-          buzz([300, 120, 300, 120, 300]);
-        }
-        return ask;
-      });
+      // 처음 물을 때만 소리·진동 (상태 갱신 함수 밖에서 해야 두 번 울리지 않음)
+      if (ask && !lateRef.current && voiceOn) {
+        speak("예상보다 늦어지고 있어요. 괜찮으세요?");
+        buzz([300, 120, 300, 120, 300]);
+      }
+      lateRef.current = ask;
+      setLate(ask);
     };
     const id = window.setInterval(tick, 30_000);
     return () => window.clearInterval(id);
   }, [navWalking, voiceOn]);
   const lateOk = () => {
     if (navClockRef.current) navClockRef.current.okAt = Date.now();
+    lateRef.current = false;
     setLate(false);
   };
 
