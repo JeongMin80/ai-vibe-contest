@@ -22,7 +22,7 @@ export type LayerId = "cctv" | "lamp" | "street" | "bell";
 export const LAYERS: { id: LayerId; label: string; color: string; short: string }[] = [
   { id: "cctv", label: "CCTV", short: "CCTV", color: "var(--cctv)" },
   { id: "lamp", label: "보안등", short: "보안등", color: "var(--lamp)" },
-  { id: "street", label: "가로등", short: "가로등", color: "var(--street)" },
+  { id: "street", label: "가로등(큰길 추정)", short: "큰길 조명", color: "var(--street)" },
   { id: "bell", label: "안전비상벨", short: "비상벨", color: "var(--bell)" },
 ];
 

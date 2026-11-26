@@ -9,9 +9,13 @@ const root = new URL("../", import.meta.url);
 const AREA = "전주시";
 const r6 = (n) => Math.round(n * 1e6) / 1e6; // 소수점 6자리 ≈ 10cm 정밀도
 
+// 서비스 지역(도로망을 받은 범위)보다 조금 넓게만 남겨 파일 크기를 줄입니다.
+const BOX = { south: 35.79, west: 127.1, north: 35.87, east: 127.175 };
+const inBox = (p) => p.lat >= BOX.south && p.lat <= BOX.north && p.lng >= BOX.west && p.lng <= BOX.east;
+
 function load(name) {
   const f = new URL(`data/safety/${name}_${AREA}.json`, root);
-  return existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  return existsSync(f) ? JSON.parse(readFileSync(f, "utf8")).filter(inBox) : [];
 }
 
 // 같은 좌표에 중복으로 등록된 시설은 하나로 합칩니다 (CCTV는 카메라 수를 더함)
@@ -32,7 +36,8 @@ const streetRaw = load("street");
 
 const cctv = dedupe(cctvRaw, (a, b) => (a.cams += b.cams)).map((p) => [r6(p.lat), r6(p.lng), p.cams]);
 const bell = dedupe(bellRaw).map((p) => [r6(p.lat), r6(p.lng), p.place ?? ""]);
-const lamp = dedupe(lampRaw).map((p) => [r6(p.lat), r6(p.lng)]);
+const r5 = (n) => Math.round(n * 1e5) / 1e5; // 보안등은 개수가 많아 1m 정밀도로 줄임
+const lamp = dedupe(lampRaw).map((p) => [r5(p.lat), r5(p.lng)]);
 const street = dedupe(streetRaw).map((p) => [r6(p.lat), r6(p.lng)]);
 
 const latest = (arr) => arr.map((p) => p.updated).filter(Boolean).sort().at(-1) ?? null;
@@ -44,8 +49,8 @@ const out = {
   sources: {
     cctv: "행정안전부_CCTV정보 조회서비스 (공공데이터포털)",
     bell: "행정안전부_안전비상벨위치정보 조회서비스 (공공데이터포털)",
-    lamp: "전북특별자치도 전주시_보안등 정보 서비스 (공공데이터포털)",
-    street: "전북특별자치도 전주시_가로등 정보 서비스 (공공데이터포털)",
+    lamp: "행정안전부_전국보안등정보표준데이터 (공공데이터포털)",
+    street: "추정: 큰길(차도)과 보도에는 가로등이 있다고 봄 (OpenStreetMap 도로 종류)",
   },
   cctv,
   bell,

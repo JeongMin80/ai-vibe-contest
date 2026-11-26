@@ -10,7 +10,8 @@
 //     len    : 길이(m)
 //     score  : 안전 점수 0~100
 //     cctv   : 50m 안 CCTV 수
-//     flags  : 1=캠퍼스 안(공공데이터 없음), 2=100m 안 비상벨, 4=조명 데이터 있음
+//     flags  : 1=캠퍼스 안(공공데이터 없음), 2=100m 안 비상벨, 4=30m 안 보안등 있음,
+//              8=큰길·보도라서 가로등이 있다고 추정(가로등 실제 위치 데이터가 없어서)
 //     hw     : 길 종류 번호 (HW_TYPES 참고)
 //     geom   : 중간 좌표 [lat, lng, ...] (양 끝 교차점 제외)
 
@@ -38,6 +39,11 @@ const ROAD_BASE = {
   steps: 0.25, track: 0.1, cycleway: 0.45, corridor: 0.5,
 };
 const hwKey = (hw) => hw.replace(/_link$/, "");
+
+// 가로등 추정: 차도가 있는 큰길과 그 옆 보도는 가로등이 설치되어 밝다고 봅니다.
+// (사용자 의견 2026-11-26. 전주시 가로등 위치 API는 전주시 자체 키가 필요해 아직 못 받음)
+const LIT_ROADS = new Set(["primary", "secondary", "tertiary"]);
+const STREETLIGHT_ESTIMATE = 0.9; // 큰길의 추정 조명 비율
 
 // ---------- 거리 계산 ----------
 const R = 6371000;
@@ -145,7 +151,14 @@ for (const w of ways) {
     if (!isJunction(w.nodes[i]) && i !== w.nodes.length - 1) continue;
     const seg = w.nodes.slice(start, i + 1);
     if (seg.every((n) => coord.has(n)) && seg[0] !== seg.at(-1)) {
-      rawEdges.push({ a: seg[0], b: seg.at(-1), pts: seg.map((n) => coord.get(n)), hw, lit: w.tags.lit });
+      rawEdges.push({
+        a: seg[0],
+        b: seg.at(-1),
+        pts: seg.map((n) => coord.get(n)),
+        hw,
+        lit: w.tags.lit,
+        sidewalk: w.tags.footway === "sidewalk",
+      });
     }
     start = i;
   }
@@ -201,7 +214,7 @@ function samplePoints(pts) {
 
 const r5 = (n) => Math.round(n * 1e5) / 1e5;
 const edges = [];
-const stats = { campus: 0, withCctv: 0, withBell: 0, scoreSum: 0, lenSum: 0 };
+const stats = { campus: 0, withCctv: 0, withBell: 0, scoreSum: 0, lenSum: 0, lamp: 0, street: 0 };
 for (const e of rawEdges) {
   let len = 0;
   for (let i = 1; i < e.pts.length; i++) len += dist(...e.pts[i - 1], ...e.pts[i]);
@@ -218,20 +231,24 @@ for (const e of rawEdges) {
     if (!bell && bellIdx.near(lat, lng, BELL_RADIUS).length) bell = true;
   }
   const cctvCover = cctvHit / samples.length;
-  const lightCover = lightHit / samples.length;
-  const road = ROAD_BASE[e.hw] + (e.lit === "yes" ? 0.1 : 0) - (e.lit === "no" ? 0.2 : 0);
-  const roadC = Math.max(0, Math.min(1, road));
+  const lampCover = lightHit / samples.length; // 실제 보안등 데이터
+  const streetEstimated = LIT_ROADS.has(e.hw) || e.sidewalk || e.lit === "yes";
+  let lightCover = lampCover;
+  if (streetEstimated) lightCover = Math.max(lightCover, e.lit === "yes" ? 1 : STREETLIGHT_ESTIMATE);
+  if (e.lit === "no") lightCover = Math.min(lightCover, 0.2);
+  const roadC = Math.max(0, Math.min(1, ROAD_BASE[e.hw]));
 
-  let score = HAS_LIGHT
-    ? 0.4 * cctvCover + 0.3 * lightCover + 0.25 * roadC + 0.05 * (bell ? 1 : 0)
-    : 0.55 * cctvCover + 0.4 * roadC + 0.05 * (bell ? 1 : 0);
+  // 조명(보안등 + 큰길 가로등 추정)이 들어가면서 길 종류 비중을 줄였습니다.
+  let score = 0.4 * cctvCover + 0.35 * lightCover + 0.2 * roadC + 0.05 * (bell ? 1 : 0);
   score = Math.round(score * 100);
 
   const mid = e.pts[Math.floor(e.pts.length / 2)];
   const campus = inCampus(mid[0], mid[1]);
   if (campus) score = Math.max(score, CAMPUS_SCORE);
 
-  const flags = (campus ? 1 : 0) | (bell ? 2 : 0) | (HAS_LIGHT ? 4 : 0);
+  const flags = (campus ? 1 : 0) | (bell ? 2 : 0) | (lampCover > 0 ? 4 : 0) | (streetEstimated ? 8 : 0);
+  stats.lamp += lampCover > 0 ? 1 : 0;
+  stats.street += streetEstimated ? 1 : 0;
   const geom = e.pts.slice(1, -1).flatMap(([la, ln]) => [r5(la), r5(ln)]);
   edges.push([idxOf(e.a), idxOf(e.b), Math.round(len), score, cctvSet.size, flags, HW_TYPES.indexOf(e.hw), geom]);
 
@@ -262,5 +279,5 @@ console.log(`교차점 ${nodeList.length}개, 길 구간 ${edges.length}개 (고
 console.log(`총 길이 ${km(stats.lenSum)}km, 거리 가중 평균 점수 ${(stats.scoreSum / stats.lenSum).toFixed(1)}`);
 console.log(`CCTV 50m 안 구간 ${stats.withCctv}, 비상벨 100m 안 구간 ${stats.withBell}, 캠퍼스 구간 ${stats.campus}`);
 console.log(`점수 분포(길이 km): 0-19 ${km(buckets[0])} | 20-39 ${km(buckets[1])} | 40-59 ${km(buckets[2])} | 60-79 ${km(buckets[3])} | 80-100 ${km(buckets[4])}`);
-console.log(`조명 데이터: ${HAS_LIGHT ? "반영" : "없음 (CCTV·길 종류·비상벨로 계산)"}`);
+console.log(`조명: 보안등 ${lights.length}개 (30m 안 보안등 있는 구간 ${stats.lamp}) · 큰길 가로등 추정 구간 ${stats.street}`);
 console.log(`public/data/graph.json ${(json.length / 1024).toFixed(0)}KB`);

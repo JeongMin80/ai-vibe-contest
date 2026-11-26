@@ -15,6 +15,10 @@ export interface RawGraph {
 
 export const FLAG_CAMPUS = 1;
 export const FLAG_BELL = 2;
+/** 30m 안에 보안등(실제 데이터)이 있음 */
+export const FLAG_LAMP = 4;
+/** 큰길·보도라서 가로등이 있다고 추정 */
+export const FLAG_STREETLIGHT = 8;
 
 export interface Graph {
   raw: RawGraph;
@@ -177,6 +181,8 @@ export interface Route {
   score: number;
   /** CCTV 50m 안을 지나는 길이 비율 (0~1) */
   cctvShare: number;
+  /** 보안등이나 큰길 가로등이 있는 길이 비율 (0~1) */
+  litShare: number;
   /** 점수 35 미만 어두운 구간의 총 길이 */
   darkLength: number;
   /** 연속된 어두운 구간 목록 (길이 순) */
@@ -248,6 +254,7 @@ function summarize(nodes: number[], segments: RouteSegment[]): Route {
   let length = 0;
   let scoreSum = 0;
   let cctvLen = 0;
+  let litLen = 0;
   let darkLength = 0;
   let cctvNear = 0;
   let bellSegments = 0;
@@ -258,6 +265,7 @@ function summarize(nodes: number[], segments: RouteSegment[]): Route {
     length += s.len;
     scoreSum += s.score * s.len;
     if (s.cctv > 0) cctvLen += s.len;
+    if (s.flags & (FLAG_LAMP | FLAG_STREETLIGHT)) litLen += s.len;
     cctvNear += s.cctv;
     if (s.flags & FLAG_BELL) bellSegments++;
     const dark = s.score < DARK_SCORE && !(s.flags & FLAG_CAMPUS);
@@ -280,6 +288,7 @@ function summarize(nodes: number[], segments: RouteSegment[]): Route {
     minutes: Math.max(1, Math.round(length / WALK_M_PER_MIN)),
     score: length ? Math.round(scoreSum / length) : 0,
     cctvShare: length ? cctvLen / length : 0,
+    litShare: length ? litLen / length : 0,
     darkLength,
     darkStretches,
     cctvNear,

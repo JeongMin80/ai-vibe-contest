@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LAYERS, PLACES, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
-import { findRoute, loadGraph, nearestNode, sameRoute, type Graph, type Route } from "@/lib/routing";
+import { FLAG_STREETLIGHT, findRoute, loadGraph, nearestNode, sameRoute, type Graph, type Route } from "@/lib/routing";
 import type { Point } from "./MapView";
 import RouteResult from "./RouteResult";
 
@@ -16,7 +16,8 @@ const MapView = dynamic(() => import("./MapView"), {
 
 type Field = "from" | "to";
 export type Level = "low" | "mid" | "high";
-export const LEVEL_WEIGHT: Record<Level, number> = { low: 1.5, mid: 3, high: 8 };
+// 실험 근거: scripts/tune-weights.mjs (개발기록.md 참고)
+export const LEVEL_WEIGHT: Record<Level, number> = { low: 1.5, mid: 3, high: 12 };
 const LEVEL_LABEL: Record<Level, string> = { low: "조금", mid: "보통", high: "최대" };
 
 export default function MapApp() {
@@ -48,6 +49,12 @@ export default function MapApp() {
     }
     return graphPromise.current;
   }, []);
+
+  // 도로 데이터는 지도가 뜬 뒤 미리 받아 둡니다 (큰길 조명 표시 + 경로 찾기를 바로 쓰도록)
+  useEffect(() => {
+    const t = setTimeout(() => void ensureGraph(), 800);
+    return () => clearTimeout(t);
+  }, [ensureGraph]);
 
   const startRouteMode = () => {
     setMode("route");
@@ -134,15 +141,21 @@ export default function MapApp() {
     return { short, safe, same: sameRoute(short, safe), failed: false };
   }, [graph, from, to, level]);
 
+  // 큰길 조명(추정)은 도로 데이터에서 계산한 구간 수
+  const streetLitCount = useMemo(
+    () => (graph ? graph.raw.edges.reduce((n, e) => n + (e[5] & FLAG_STREETLIGHT ? 1 : 0), 0) : 0),
+    [graph]
+  );
+
   const counts = useMemo(
     () =>
       ({
         cctv: data?.cctv.length ?? 0,
         lamp: data?.lamp.length ?? 0,
-        street: data?.street.length ?? 0,
+        street: streetLitCount,
         bell: data?.bell.length ?? 0,
       }) satisfies Record<LayerId, number>,
-    [data]
+    [data, streetLitCount]
   );
 
   const shownSafe: Route | null = routes?.safe ?? null;
@@ -152,6 +165,7 @@ export default function MapApp() {
     <main className="relative flex-1 min-h-dvh overflow-hidden">
       <MapView
         data={data}
+        graph={graph}
         visible={visible}
         from={mode === "route" ? from : null}
         to={mode === "route" ? to : null}
@@ -195,7 +209,8 @@ export default function MapApp() {
               <div className="grid grid-cols-4 gap-2">
                 {LAYERS.map((l) => {
                   const on = visible[l.id];
-                  const empty = data !== null && counts[l.id] === 0;
+                  const empty = (l.id === "street" ? graph !== null : data !== null) && counts[l.id] === 0;
+                  const loading = l.id === "street" ? graph === null : data === null;
                   return (
                     <button
                       key={l.id}
@@ -208,7 +223,9 @@ export default function MapApp() {
                     >
                       <span className="h-3 w-3 rounded-full" style={{ background: l.color }} aria-hidden />
                       <span className="font-medium">{l.short}</span>
-                      <span className="text-[11px] text-muted">{empty ? "준비 중" : counts[l.id].toLocaleString()}</span>
+                      <span className="text-[11px] text-muted">
+                        {loading ? "…" : empty ? "준비 중" : l.id === "street" ? `${counts[l.id].toLocaleString()}구간` : counts[l.id].toLocaleString()}
+                      </span>
                     </button>
                   );
                 })}

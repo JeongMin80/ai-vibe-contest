@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { PLACES, SERVICE_AREA, type FacilityData, type LayerId } from "@/lib/facilities";
-import { scoreColor, type Route } from "@/lib/routing";
+import { FLAG_STREETLIGHT, scoreColor, type Graph, type Route } from "@/lib/routing";
 
 export interface Point {
   lat: number;
@@ -14,6 +14,7 @@ export interface Point {
 
 interface Props {
   data: FacilityData | null;
+  graph: Graph | null;
   visible: Record<LayerId, boolean>;
   from: Point | null;
   to: Point | null;
@@ -40,7 +41,7 @@ function pinIcon(letter: string, color: string) {
   });
 }
 
-export default function MapView({ data, visible, from, to, safe, short, onPick, picking }: Props) {
+export default function MapView({ data, graph, visible, from, to, safe, short, onPick, picking }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const groupsRef = useRef<Partial<Record<LayerId, L.LayerGroup>>>({});
@@ -137,11 +138,6 @@ export default function MapView({ data, visible, from, to, safe, short, onPick, 
         L.circleMarker([lat, lng], { renderer, radius: 2, color: COLORS.lamp, weight: 0, fillOpacity: 0.7 })
       )
     );
-    groups.street = L.layerGroup(
-      data.street.map(([lat, lng]) =>
-        L.circleMarker([lat, lng], { renderer, radius: 2, color: COLORS.street, weight: 0, fillOpacity: 0.7 })
-      )
-    );
     groups.bell = L.layerGroup(
       data.bell.map(([lat, lng, place]) =>
         L.circleMarker([lat, lng], {
@@ -155,11 +151,38 @@ export default function MapView({ data, visible, from, to, safe, short, onPick, 
       )
     );
 
-    groupsRef.current = groups;
+    groupsRef.current = { ...groupsRef.current, ...groups };
     return () => {
       for (const g of Object.values(groups)) g?.remove();
     };
   }, [data]);
+
+  // 큰길 조명(추정): 도로 데이터에서 가로등이 있다고 본 구간을 은은한 빛줄기로 표시
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !graph) return;
+    const renderer = L.canvas({ padding: 0.5 });
+    const lines: L.LatLngTuple[][] = [];
+    for (const e of graph.raw.edges) {
+      if (!(e[5] & FLAG_STREETLIGHT)) continue;
+      const [u, v, , , , , , geom] = e;
+      const pts: L.LatLngTuple[] = [[graph.lat[u], graph.lng[u]]];
+      for (let j = 0; j < geom.length; j += 2) pts.push([geom[j], geom[j + 1]]);
+      pts.push([graph.lat[v], graph.lng[v]]);
+      lines.push(pts);
+    }
+    const group = L.layerGroup([
+      L.polyline(lines, { renderer, color: COLORS.street, weight: 7, opacity: 0.12, interactive: false }),
+      L.polyline(lines, { renderer, color: COLORS.street, weight: 2, opacity: 0.45, interactive: false }),
+    ]);
+    groupsRef.current = { ...groupsRef.current, street: group };
+    if (visible.street) group.addTo(map);
+    return () => {
+      group.remove();
+    };
+    // visible 은 아래 효과에서 반영하므로 여기서는 처음 한 번만 봅니다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph]);
 
   // 켜기·끄기 반영
   useEffect(() => {
@@ -169,7 +192,7 @@ export default function MapView({ data, visible, from, to, safe, short, onPick, 
       if (visible[id] && !map.hasLayer(group)) group.addTo(map);
       if (!visible[id] && map.hasLayer(group)) group.remove();
     }
-  }, [visible, data]);
+  }, [visible, data, graph]);
 
   // 출발·도착 핀
   useEffect(() => {
