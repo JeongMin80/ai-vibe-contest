@@ -42,6 +42,9 @@ export async function openEdge({ site, port = 9333, width = 390, height = 844, s
   let ws;
   let seq = 0;
   const pending = new Map();
+  const listeners = new Map();
+  /** 브라우저 이벤트 받기 (예: Page.screencastFrame) */
+  const on = (method, fn) => listeners.set(method, fn);
   const send = (method, params = {}) => {
     const id = ++seq;
     ws.send(JSON.stringify({ id, method, params }));
@@ -70,6 +73,7 @@ export async function openEdge({ site, port = 9333, width = 390, height = 844, s
           });
           sock.onmessage = (e) => {
             const m = JSON.parse(e.data);
+            if (m.method && listeners.has(m.method)) listeners.get(m.method)(m.params);
             if (m.id && pending.has(m.id)) {
               const p = pending.get(m.id);
               pending.delete(m.id);
@@ -123,5 +127,5 @@ export async function openEdge({ site, port = 9333, width = 390, height = 844, s
          if (!b) throw new Error('버튼 없음: ' + ${JSON.stringify(text)}); b.click();`);
   const text = () => run(`return document.body.innerText;`);
 
-  return { send, run, go, waitFor, shot, click, text, close };
+  return { send, on, run, go, waitFor, shot, click, text, close };
 }
