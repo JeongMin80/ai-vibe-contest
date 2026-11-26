@@ -1,6 +1,6 @@
 // 경로 공유 링크 점검
 // 실행: node --experimental-strip-types --no-warnings scripts/test-share.mjs
-import { arriveText, departText, encodeShare, parseShare, toward } from "../src/lib/share.ts";
+import { arriveText, departText, encodeShare, lateText, parseShare, toward } from "../src/lib/share.ts";
 
 let failures = 0;
 const check = (cond, msg) => {
@@ -41,6 +41,7 @@ const dep = departText("집", 12, t0);
 check(dep.includes("집으로 걸어가고") && dep.includes("약 12분 뒤(0:04쯤)"), "출발 알림: 도착 예정 시각이 자정을 넘겨도 맞음 → " + dep);
 check(departText("집", 0.2, t0).includes("약 1분"), "1분 미만은 1분");
 check(arriveText("기숙사", t0) === "[환한길] 기숙사에 안전하게 도착했어요. (23:52)", "도착 알림");
+check(lateText("집").includes("집으로 가는 중") && lateText("집").includes("지금 제 위치"), "늦어짐 알림 문장");
 
 console.log(failures ? `\n공유 링크 점검 실패 ${failures}건` : "✅ 공유 링크 점검 통과");
 process.exit(failures ? 1 : 0);

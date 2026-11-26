@@ -103,6 +103,20 @@ try {
     return `"${c.split("\n")[0]}" + 경로 링크`;
   });
 
+  await step("늦어짐 확인 (괜찮으세요?)", async () => {
+    // 시계를 30분 앞당기면 30초 안에 "괜찮으세요?"가 떠야 함
+    await run(`window.__off = 30 * 60_000; window.__copied = null;`);
+    const ms = await waitFor(has("괜찮으세요"), 40000, "늦어짐 확인");
+    await click("지금 위치 보내기");
+    await waitFor(`window.__copied`, 5000, "위치 알림");
+    const c = await run(`return window.__copied;`);
+    if (!c.includes("늦어지고") || !c.includes("/?t=")) throw new Error("문장이 다름: " + c);
+    await click("괜찮아요");
+    await waitFor(`!${has("괜찮으세요")}`, 3000, "확인 닫힘");
+    await run(`window.__off = 0;`);
+    return `${Math.round(ms / 1000)}초 만에 표시 → 지금 위치 링크 보내기 → 괜찮아요로 닫힘`;
+  });
+
   await step("경로 이탈 알림", async () => {
     // 경로에서 떨어진 곳으로 두 번 이동 (GPS 튐을 거르려고 2번 연속일 때 알림)
     await run(`window.__move(35.8478, 127.1262);`);

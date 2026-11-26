@@ -1,7 +1,7 @@
 // 길 안내 계산 점검
 // 실행: node --experimental-strip-types --no-warnings scripts/test-nav.mjs
 import { readFileSync } from "node:fs";
-import { buildLine, locate, darkAhead } from "../src/lib/navigation.ts";
+import { buildLine, locate, darkAhead, lateCheck } from "../src/lib/navigation.ts";
 import { buildGraph, findRoute, nearestNode } from "../src/lib/routing.ts";
 
 let failures = 0;
@@ -58,6 +58,18 @@ for (let i = 0; i < realLine.pts.length; i += 3) {
 }
 check(monotonic, "경로를 따라가면 along이 줄지 않음");
 check(maxOff < 0.5, `경로 위 점의 offset ≈ 0 (최대 ${maxOff.toFixed(2)}m)`);
+
+// 늦어짐 확인: 12분 예정 → 22분(12+10)이 지나야 물어봄, 40분 예정 → 60분(1.5배)
+{
+  const t0 = 1_000_000;
+  const min = 60_000;
+  check(!lateCheck(t0, 12, t0 + 21 * min, null), "12분 예정: 21분에는 아직 안 물어봄");
+  check(lateCheck(t0, 12, t0 + 22 * min, null), "12분 예정: 22분이 지나면 물어봄");
+  check(!lateCheck(t0, 40, t0 + 55 * min, null), "40분 예정: 55분에는 아직");
+  check(lateCheck(t0, 40, t0 + 60 * min, null), "40분 예정: 60분(1.5배)에 물어봄");
+  check(!lateCheck(t0, 12, t0 + 25 * min, t0 + 23 * min), "괜찮아요 누른 뒤 10분 동안은 다시 안 물어봄");
+  check(lateCheck(t0, 12, t0 + 33 * min, t0 + 23 * min), "괜찮아요 10분 뒤 다시 물어봄");
+}
 
 console.log(failures ? `\n길 안내 점검 실패 ${failures}건` : "✅ 길 안내 점검 통과");
 process.exit(failures ? 1 : 0);

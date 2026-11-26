@@ -55,7 +55,7 @@ Next.js 16 · TypeScript · Tailwind CSS · Leaflet · Supabase · Vercel · PWA
 
 ```bash
 npm test        # 자동 점검 8종 (경로·내 장소·길 안내·공유·밤·제보·지역·음성)
-npm run check:live   # 실제 사이트를 휴대폰 크기 Edge로 자동 조작해 16단계 점검 → docs/live-check.md
+npm run check:live   # 실제 사이트를 휴대폰 크기 Edge로 자동 조작해 17단계 점검 → docs/live-check.md
 npm run screens      # 제출용 화면 사진 다시 찍기 → docs/screenshots/
 npm run demo-video   # 자막 들어간 시연 영상(90초, 소리 없음) 자동 생성 → docs/demo/
 node scripts/make-diagram.mjs   # 서비스 구조도 그림 → docs/diagrams/architecture.png

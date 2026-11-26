@@ -28,20 +28,23 @@ interface Props {
   voiceOn: boolean;
   onToggleVoice: () => void;
   /** 안심 귀가 알림 (가족·친구에게 출발·도착 알리기) */
-  onNotify?: (kind: "depart" | "arrive", minutes: number) => Promise<"shared" | "copied" | "failed">;
+  onNotify?: (kind: "depart" | "arrive" | "late", minutes: number) => Promise<"shared" | "copied" | "failed">;
+  /** 예상보다 한참 늦어져 "괜찮으세요?"를 물을 때 */
+  late?: boolean;
+  onLateOk?: () => void;
 }
 
 const meters = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${Math.max(0, Math.round(m / 10) * 10)}m`);
 
 /** 걸으면서 보는 안내 화면 (지도를 많이 가리지 않게 작게) */
-export default function NavPanel({ nav, total, segment, dark, destination, onReroute, onFollow, onStop, onSafe, voiceOn, onToggleVoice, onNotify }: Props) {
+export default function NavPanel({ nav, total, segment, dark, destination, onReroute, onFollow, onStop, onSafe, voiceOn, onToggleVoice, onNotify, late, onLateOk }: Props) {
   const remaining = Math.max(0, total - nav.along);
   const minutes = Math.max(1, Math.round(remaining / 75));
   const offRoute = nav.offCount >= 2 && !nav.arrived;
   const [notice, setNotice] = useState<string | null>(null);
-  const notify = async () => {
+  const notify = async (kind: "depart" | "arrive" | "late" = nav.arrived ? "arrive" : "depart") => {
     if (!onNotify) return;
-    const r = await onNotify(nav.arrived ? "arrive" : "depart", minutes);
+    const r = await onNotify(kind, minutes);
     if (r === "shared") return;
     setNotice(r === "copied" ? "✓ 알림 문장을 복사했어요. 문자·메신저에 붙여 넣어 보내세요." : "알림을 보내지 못했어요.");
     setTimeout(() => setNotice(null), 4000);
@@ -72,6 +75,22 @@ export default function NavPanel({ nav, total, segment, dark, destination, onRer
               </span>
             )}
           </div>
+
+          {late && (
+            <div role="alert" className="mt-2 rounded-xl border border-warn/60 bg-warn/15 px-3 py-2">
+              <p className="text-sm font-bold text-warn">⏰ 예상보다 늦어지고 있어요. 괜찮으세요?</p>
+              <div className="mt-1.5 flex gap-1.5">
+                <button type="button" onClick={onLateOk} className="flex-1 rounded-lg border border-line py-2 text-xs font-bold">
+                  괜찮아요
+                </button>
+                {onNotify && (
+                  <button type="button" onClick={() => void notify("late")} className="flex-[1.6] rounded-lg bg-warn py-2 text-xs font-bold text-bg">
+                    📨 가족에게 지금 위치 보내기
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {offRoute ? (
             <div className="mt-2 rounded-xl bg-warn/15 px-3 py-2">

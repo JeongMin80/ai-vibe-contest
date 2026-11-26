@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { LAYERS, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
 import { DEFAULT_REGION, REGIONS, regionById, regionOf, type RegionId } from "@/lib/regions";
 import { FLAG_STREETLIGHT, distM, findRoute, loadGraph, nearestNode, sameRoute, type Graph, type Route } from "@/lib/routing";
-import { ARRIVE_M, OFF_ROUTE_M, buildLine, darkAhead, locate, segmentAt, type RouteLine } from "@/lib/navigation";
+import { ARRIVE_M, OFF_ROUTE_M, buildLine, darkAhead, lateCheck, locate, segmentAt, type RouteLine } from "@/lib/navigation";
 import NavPanel, { type NavState } from "./NavPanel";
 import type { Point } from "./MapView";
 import {
@@ -21,7 +21,7 @@ import {
 import MyPlaces from "./MyPlaces";
 import PlaceField from "./PlaceField";
 import RouteResult from "./RouteResult";
-import { arriveText, departText, encodeShare, parseShare } from "@/lib/share";
+import { arriveText, departText, encodeShare, lateText, parseShare } from "@/lib/share";
 import { isNight } from "@/lib/sun";
 import NightToggle from "./NightToggle";
 import Onboarding from "./Onboarding";
@@ -107,6 +107,9 @@ export default function MapApp() {
   /** 음성 안내 켜기·끄기(이 기기에 저장)와 이미 말한 알림 */
   const voiceOn = useSyncExternalStore(subscribeVoice, getVoiceOn, getVoiceServer);
   const spokenRef = useRef<Set<string>>(new Set());
+  /** 늦어짐 확인("괜찮으세요?"): 안내 시작 시각, 예상 시간(분), 마지막으로 "괜찮아요"를 누른 시각 */
+  const navClockRef = useRef<{ startedAt: number; expected: number; okAt: number | null } | null>(null);
+  const [late, setLate] = useState(false);
   /** 시민 제보: 최근 제보 목록, 제보 작성 중 상태, 고마움 알림 */
   const [reports, setReports] = useState<Report[]>([]);
   const [reporting, setReporting] = useState<{
@@ -557,8 +560,14 @@ ${url}` : text);
   };
 
   /** 안심 귀가 알림: 가족·친구에게 출발(도착 예정 시각 + 경로 링크)·도착을 알림 */
-  const notifyFamily = (kind: "depart" | "arrive", minutes: number) => {
+  const notifyFamily = (kind: "depart" | "arrive" | "late", minutes: number) => {
     const dest = to?.label ?? "도착지";
+    if (kind === "late") {
+      // 지금 위치 링크: 받는 사람이 열면 그 위치까지 안심 경로가 보임
+      const me = nav?.me;
+      const here = me ? `${window.location.origin}/?${encodeShare({ to: { lat: me.lat, lng: me.lng, label: "친구의 지금 위치" } })}` : routeUrl();
+      return sendShare(lateText(dest), here);
+    }
     return kind === "depart" ? sendShare(departText(dest, minutes), routeUrl()) : sendShare(arriveText(dest));
   };
 
@@ -571,6 +580,8 @@ ${url}` : text);
     setPicking(null);
     setNav({ me: null, along: 0, offset: 0, offCount: 0, arrived: false, follow: true, error: null });
     spokenRef.current = new Set();
+    navClockRef.current = { startedAt: Date.now(), expected: line ? Math.max(1, Math.round(line.total / 75)) : 15, okAt: null };
+    setLate(false);
     // 버튼을 누른 순간에 말해야 아이폰(사파리)에서도 이후 음성 안내가 나옵니다
     if (voiceOn && line) speak(startText(to?.label ?? "도착지", line.total));
   };
@@ -584,6 +595,30 @@ ${url}` : text);
 
   const navSegment = nav && line && shownSafe ? segmentAt(shownSafe, line, nav.along) : null;
   const navDark = nav && line && shownSafe ? darkAhead(shownSafe, line, nav.along) : null;
+
+  // 늦어짐 확인: 예상보다 한참 늦으면 "괜찮으세요?"를 묻고 소리·진동으로 알림 (30초마다 확인)
+  const navWalking = !!nav && !nav.arrived;
+  useEffect(() => {
+    if (!navWalking) return;
+    const tick = () => {
+      const c = navClockRef.current;
+      if (!c) return;
+      const ask = lateCheck(c.startedAt, c.expected, Date.now(), c.okAt);
+      setLate((was) => {
+        if (ask && !was && voiceOn) {
+          speak("예상보다 늦어지고 있어요. 괜찮으세요?");
+          buzz([300, 120, 300, 120, 300]);
+        }
+        return ask;
+      });
+    };
+    const id = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(id);
+  }, [navWalking, voiceOn]);
+  const lateOk = () => {
+    if (navClockRef.current) navClockRef.current.okAt = Date.now();
+    setLate(false);
+  };
 
   // 음성·진동 안내: 주머니에 넣고 걸어도 이탈·어두운 길·도착을 알 수 있게
   const destLabel = to?.label ?? "도착지";
@@ -781,6 +816,8 @@ ${url}` : text);
               }}
               onSafe={openSafe}
               onNotify={notifyFamily}
+              late={late && navWalking}
+              onLateOk={lateOk}
               voiceOn={voiceOn}
               onToggleVoice={() => setVoiceOn(!voiceOn)}
             />

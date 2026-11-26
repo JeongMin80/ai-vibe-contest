@@ -22,6 +22,9 @@ export const PRELUDE = `
   try { Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }); } catch {}
   window.__copied = null;
   try { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { window.__copied = t; } }, configurable: true }); } catch {}
+  // 시계 앞당기기(늦어짐 확인 점검용): window.__off 밀리초만큼 Date.now()가 앞서 감
+  window.__off = 0;
+  { const realNow = Date.now; Date.now = () => realNow() + window.__off; }
   window.__errors = [];
   window.addEventListener('error', (e) => window.__errors.push(String(e.message)));
   window.addEventListener('unhandledrejection', (e) => window.__errors.push(String(e.reason)));

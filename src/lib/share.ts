@@ -82,3 +82,8 @@ export function departText(dest: string, minutes: number, now: Date = new Date()
 export function arriveText(dest: string, now: Date = new Date()): string {
   return `[환한길] ${dest}에 안전하게 도착했어요. (${hhmm(now)})`;
 }
+
+/** 늦어짐 알림: 지금 위치 링크를 열면 받는 사람 휴대폰에서 그 위치까지 안심 경로가 보임 */
+export function lateText(dest: string): string {
+  return `[환한길] 예상보다 늦어지고 있어요. ${toward(dest)} 가는 중이에요. 아래 링크가 지금 제 위치예요.`;
+}

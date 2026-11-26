@@ -101,3 +101,12 @@ export function segmentAt(route: Route, line: RouteLine, along: number) {
   }
   return route.segments[route.segments.length - 1] ?? null;
 }
+
+/** 늦어짐 확인("괜찮으세요?"): 예상 시간의 1.5배와 예상 +10분 중 늦은 때가 지나면 물어봄.
+ *  "괜찮아요"를 누르면 10분 뒤에 다시 물어봄 */
+export const LATE_REASK_MS = 10 * 60_000;
+export function lateCheck(startedAt: number, expectedMin: number, now: number, okAt: number | null): boolean {
+  const limit = startedAt + Math.max(expectedMin * 1.5, expectedMin + 10) * 60_000;
+  if (now < limit) return false;
+  return okAt === null || now - okAt >= LATE_REASK_MS;
+}
