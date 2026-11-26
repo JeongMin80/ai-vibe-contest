@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { RouteSegment } from "@/lib/routing";
 import { FLAG_CAMPUS, scoreColor, scoreLabel } from "@/lib/routing";
 
@@ -26,15 +27,25 @@ interface Props {
   /** 음성·진동 안내 */
   voiceOn: boolean;
   onToggleVoice: () => void;
+  /** 안심 귀가 알림 (가족·친구에게 출발·도착 알리기) */
+  onNotify?: (kind: "depart" | "arrive", minutes: number) => Promise<"shared" | "copied" | "failed">;
 }
 
 const meters = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${Math.max(0, Math.round(m / 10) * 10)}m`);
 
 /** 걸으면서 보는 안내 화면 (지도를 많이 가리지 않게 작게) */
-export default function NavPanel({ nav, total, segment, dark, destination, onReroute, onFollow, onStop, onSafe, voiceOn, onToggleVoice }: Props) {
+export default function NavPanel({ nav, total, segment, dark, destination, onReroute, onFollow, onStop, onSafe, voiceOn, onToggleVoice, onNotify }: Props) {
   const remaining = Math.max(0, total - nav.along);
   const minutes = Math.max(1, Math.round(remaining / 75));
   const offRoute = nav.offCount >= 2 && !nav.arrived;
+  const [notice, setNotice] = useState<string | null>(null);
+  const notify = async () => {
+    if (!onNotify) return;
+    const r = await onNotify(nav.arrived ? "arrive" : "depart", minutes);
+    if (r === "shared") return;
+    setNotice(r === "copied" ? "✓ 알림 문장을 복사했어요. 문자·메신저에 붙여 넣어 보내세요." : "알림을 보내지 못했어요.");
+    setTimeout(() => setNotice(null), 4000);
+  };
 
   return (
     <div aria-live="polite">
@@ -79,6 +90,21 @@ export default function NavPanel({ nav, total, segment, dark, destination, onRer
 
           {nav.me.acc > 50 && <p className="mt-1.5 text-[11px] text-muted">GPS 정확도가 낮아요(±{Math.round(nav.me.acc)}m).</p>}
         </>
+      )}
+
+      {onNotify && (nav.arrived || nav.me) && (
+        <button
+          type="button"
+          onClick={() => void notify()}
+          className="mt-2 w-full rounded-xl border border-accent/60 py-2 text-sm font-bold text-accent"
+        >
+          {nav.arrived ? "📨 가족·친구에게 도착 알리기" : "📨 가족·친구에게 출발 알리기"}
+        </button>
+      )}
+      {notice && (
+        <p role="status" className="mt-1 text-[11px] text-muted">
+          {notice}
+        </p>
       )}
 
       {!nav.arrived && (

@@ -21,7 +21,7 @@ import {
 import MyPlaces from "./MyPlaces";
 import PlaceField from "./PlaceField";
 import RouteResult from "./RouteResult";
-import { encodeShare, parseShare } from "@/lib/share";
+import { arriveText, departText, encodeShare, parseShare } from "@/lib/share";
 import { isNight } from "@/lib/sun";
 import NightToggle from "./NightToggle";
 import Onboarding from "./Onboarding";
@@ -527,15 +527,11 @@ export default function MapApp() {
     await setPoint("to", lat, lng, name);
   };
 
-  /** 경로 공유: 휴대폰이면 공유창(카카오톡 등), 아니면 링크 복사 */
-  const shareRoute = async (): Promise<"shared" | "copied" | "failed"> => {
-    if (!from || !to) return "failed";
-    const url = `${window.location.origin}/?${encodeShare({ from, to, level })}`;
-    const mins = routes?.safe?.minutes;
-    const text = `환한길 안심 경로: ${from.label} → ${to.label}${mins ? ` (걸어서 약 ${mins}분)` : ""}`;
+  /** 휴대폰이면 공유창(카카오톡·문자 등), 아니면 복사 */
+  const sendShare = async (text: string, url?: string): Promise<"shared" | "copied" | "failed"> => {
     if (typeof navigator.share === "function") {
       try {
-        await navigator.share({ title: "환한길 · 밤길 안심 경로", text, url });
+        await navigator.share(url ? { title: "환한길 · 밤길 안심 경로", text, url } : { text });
         return "shared";
       } catch (e) {
         // 사용자가 공유창을 닫은 경우는 실패로 보지 않음
@@ -543,11 +539,27 @@ export default function MapApp() {
       }
     }
     try {
-      await navigator.clipboard.writeText(`${text}\n${url}`);
+      await navigator.clipboard.writeText(url ? `${text}
+${url}` : text);
       return "copied";
     } catch {
       return "failed";
     }
+  };
+
+  const routeUrl = () => (from && to ? `${window.location.origin}/?${encodeShare({ from, to, level })}` : undefined);
+
+  /** 경로 공유 */
+  const shareRoute = async () => {
+    if (!from || !to) return "failed" as const;
+    const mins = routes?.safe?.minutes;
+    return sendShare(`환한길 안심 경로: ${from.label} → ${to.label}${mins ? ` (걸어서 약 ${mins}분)` : ""}`, routeUrl());
+  };
+
+  /** 안심 귀가 알림: 가족·친구에게 출발(도착 예정 시각 + 경로 링크)·도착을 알림 */
+  const notifyFamily = (kind: "depart" | "arrive", minutes: number) => {
+    const dest = to?.label ?? "도착지";
+    return kind === "depart" ? sendShare(departText(dest, minutes), routeUrl()) : sendShare(arriveText(dest));
   };
 
   const startNav = () => {
@@ -768,6 +780,7 @@ export default function MapApp() {
                 setNav(null);
               }}
               onSafe={openSafe}
+              onNotify={notifyFamily}
               voiceOn={voiceOn}
               onToggleVoice={() => setVoiceOn(!voiceOn)}
             />

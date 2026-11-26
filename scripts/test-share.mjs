@@ -1,6 +1,6 @@
 // 경로 공유 링크 점검
 // 실행: node --experimental-strip-types --no-warnings scripts/test-share.mjs
-import { encodeShare, parseShare } from "../src/lib/share.ts";
+import { arriveText, departText, encodeShare, parseShare, toward } from "../src/lib/share.ts";
 
 let failures = 0;
 const check = (cond, msg) => {
@@ -28,6 +28,19 @@ check(parseShare("?l=extreme").level === undefined, "모르는 안전 정도는 
 check(parseShare("?t=35.84,127.13," + "가".repeat(80)).to?.label.length === 40, "이름은 40자까지");
 check(parseShare("?t=35.84,127.13,%3Cscript%3E%0A").to?.label === "<script>", "제어 문자 제거(화면에는 글자로만 표시됨)");
 check(Object.values(parseShare("")).every((v) => v === undefined), "빈 주소는 아무것도 없음");
+
+// 안심 귀가 알림 문장
+check(toward("집") === "집으로", "받침 있으면 '으로'");
+check(toward("학교") === "학교로", "받침 없으면 '로'");
+check(toward("기숙사 1관") === "기숙사 1관으로", "끝 글자 기준");
+check(toward("도서관") === "도서관으로", "ㄴ 받침");
+check(toward("교실") === "교실로", "ㄹ 받침은 '로'");
+check(toward("CU") === "CU(으)로", "한글이 아니면 (으)로");
+const t0 = new Date(2026, 10, 27, 23, 52);
+const dep = departText("집", 12, t0);
+check(dep.includes("집으로 걸어가고") && dep.includes("약 12분 뒤(0:04쯤)"), "출발 알림: 도착 예정 시각이 자정을 넘겨도 맞음 → " + dep);
+check(departText("집", 0.2, t0).includes("약 1분"), "1분 미만은 1분");
+check(arriveText("기숙사", t0) === "[환한길] 기숙사에 안전하게 도착했어요. (23:52)", "도착 알림");
 
 console.log(failures ? `\n공유 링크 점검 실패 ${failures}건` : "✅ 공유 링크 점검 통과");
 process.exit(failures ? 1 : 0);

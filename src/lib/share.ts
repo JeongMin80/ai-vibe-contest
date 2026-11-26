@@ -57,3 +57,28 @@ export function parseShare(search: string): ShareData {
     level: level && LEVELS.includes(level) ? level : undefined,
   };
 }
+
+// ---- 안심 귀가 알림: 가족·친구에게 보내는 출발·도착 문장 ----
+
+const hhmm = (d: Date) => `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+/** 받침에 맞춰 "로/으로" 고르기 (한글이 아니면 "(으)로") */
+export function toward(word: string): string {
+  const w = word.trim();
+  const code = w.charCodeAt(w.length - 1) - 0xac00;
+  if (!(code >= 0 && code <= 11171)) return `${w}(으)로`;
+  const jong = code % 28;
+  return jong === 0 || jong === 8 ? `${w}로` : `${w}으로`;
+}
+
+/** 출발 알림: "지금 ○○로 걸어가고 있어요. 약 N분 뒤(HH:MM쯤) 도착 예정" */
+export function departText(dest: string, minutes: number, now: Date = new Date()): string {
+  const m = Math.max(1, Math.round(minutes));
+  const eta = new Date(now.getTime() + m * 60_000);
+  return `[환한길] 지금 ${toward(dest)} 걸어가고 있어요. 약 ${m}분 뒤(${hhmm(eta)}쯤) 도착할 예정이에요.`;
+}
+
+/** 도착 알림 */
+export function arriveText(dest: string, now: Date = new Date()): string {
+  return `[환한길] ${dest}에 안전하게 도착했어요. (${hhmm(now)})`;
+}
