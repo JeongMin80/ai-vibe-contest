@@ -41,7 +41,7 @@ export default function PlaceField({ field, label, active, locating, onFocus, on
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&region=${region}`, { signal: ctrl.signal });
         const json = (await res.json()) as { results?: SearchResult[]; error?: string };
         if (!res.ok || !json.results) {
-          setError(json.error ?? "검색하지 못했어요.");
+          setError(`${json.error ?? "검색하지 못했어요."} 지도를 눌러서 고를 수도 있어요.`);
           setStatus("error");
           return;
         }
@@ -49,7 +49,7 @@ export default function PlaceField({ field, label, active, locating, onFocus, on
         setStatus(json.results.length ? "idle" : "empty");
       } catch (e) {
         if ((e as Error).name !== "AbortError") {
-          setError("검색하지 못했어요. 인터넷 연결을 확인해 주세요.");
+          setError("검색하지 못했어요. 인터넷 연결을 확인해 주세요. 지도를 눌러서 고를 수도 있어요.");
           setStatus("error");
         }
       }

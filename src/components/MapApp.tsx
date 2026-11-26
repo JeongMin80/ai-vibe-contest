@@ -67,6 +67,18 @@ function subscribeMinute(cb: () => void) {
 const getNightNow = () => isNight(new Date(), ...JEONJU);
 const getNightServer = () => false;
 
+// 인터넷 연결 상태 (끊기면 안내 띠를 보여 줌). 서버 렌더링 때는 연결된 것으로 둡니다.
+function subscribeOnline(cb: () => void) {
+  window.addEventListener("online", cb);
+  window.addEventListener("offline", cb);
+  return () => {
+    window.removeEventListener("online", cb);
+    window.removeEventListener("offline", cb);
+  };
+}
+const getOnline = () => navigator.onLine;
+const getOnlineServer = () => true;
+
 function finishOnboarding() {
   onboardDismissed = true;
   try {
@@ -126,16 +138,24 @@ export default function MapApp() {
   const night = nightOverride ?? nightNow;
   /** "어디로 가세요?"로 들어오면 도착지 검색칸에 바로 커서 */
   const [focusTo, setFocusTo] = useState(false);
+  const online = useSyncExternalStore(subscribeOnline, getOnline, getOnlineServer);
+  /** 데이터를 못 받았을 때 안내 (다시 시도 버튼과 함께 보여 줌) */
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
     loadFacilities(regionId)
-      .then((d) => alive && setData(d))
-      .catch((e: Error) => alive && setMessage(e.message));
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        setLoadError(null);
+      })
+      .catch(() => alive && setLoadError("안전시설 데이터를 받지 못했어요."));
     return () => {
       alive = false;
     };
-  }, [regionId]);
+  }, [regionId, reloadKey]);
 
   // 최근 시민 제보 (실패해도 지도·경로는 그대로 쓸 수 있게 조용히 넘어감)
   const loadReports = useCallback(() => {
@@ -167,9 +187,9 @@ export default function MapApp() {
     if (!p) {
       p = loadGraph(id);
       graphPromises.current.set(id, p);
-      p.catch((e: Error) => {
+      p.catch(() => {
         graphPromises.current.delete(id);
-        setMessage(e.message);
+        if (regionRef.current === id) setLoadError("도로 데이터를 받지 못해 경로를 찾을 수 없어요.");
       });
     }
     p.then((g) => {
@@ -177,6 +197,19 @@ export default function MapApp() {
     }).catch(() => {});
     return p;
   }, []);
+
+  /** 못 받은 데이터 다시 받기 */
+  const retryLoad = useCallback(() => {
+    setLoadError(null);
+    setReloadKey((k) => k + 1);
+    void ensureGraph();
+  }, [ensureGraph]);
+  // 인터넷이 다시 연결되면, 못 받은 데이터가 있을 때 자동으로 다시 시도
+  useEffect(() => {
+    if (!loadError) return;
+    window.addEventListener("online", retryLoad);
+    return () => window.removeEventListener("online", retryLoad);
+  }, [loadError, retryLoad]);
 
   /** 다른 지역으로 옮기기: 지도·데이터를 바꾸고, 그 지역에 없는 출발·도착은 지웁니다 */
   const switchRegion = useCallback(
@@ -587,6 +620,11 @@ export default function MapApp() {
             </div>
           )}
         </div>
+        {!online && (
+          <p role="status" className="pointer-events-auto rounded-xl border border-warn/50 bg-panel/95 px-3 py-2 text-xs text-warn shadow-lg">
+            📵 인터넷이 끊겼어요 · 이미 받은 지역의 지도·경로·비상벨은 쓸 수 있어요
+          </p>
+        )}
         {mode === "route" && picking && (
           <p
             role="status"
@@ -829,6 +867,20 @@ export default function MapApp() {
             <p role="alert" className="mt-3 rounded-xl bg-danger/15 px-3 py-2 text-xs text-danger">
               {message}
             </p>
+          )}
+          {loadError && (
+            <div role="alert" className="mt-3 rounded-xl bg-danger/15 px-3 py-2.5 text-xs text-danger">
+              <p>
+                {loadError} {online ? "인터넷이 느리거나 잠시 문제가 있을 수 있어요." : "인터넷 연결이 끊겨 있어요. 연결되면 자동으로 다시 받아요."}
+              </p>
+              <button
+                type="button"
+                onClick={retryLoad}
+                className="mt-2 w-full rounded-lg border border-danger/60 py-2 text-sm font-bold text-danger"
+              >
+                다시 시도
+              </button>
+            </div>
           )}
         </div>
       </section>

@@ -39,6 +39,7 @@ const walkMin = (m: number) => Math.max(1, Math.round((m * 1.3) / 75));
 export default function SafeNearby({ origin, locating, error, data, onRoute, onClose }: Props) {
   const [remote, setRemote] = useState<{ stores: NearbyPlace[]; police: NearbyPlace[] } | null>(null);
   const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [tryKey, setTryKey] = useState(0);
 
   useEffect(() => {
     if (!origin) return;
@@ -51,10 +52,12 @@ export default function SafeNearby({ origin, locating, error, data, onRoute, onC
         setRemoteError(null);
       })
       .catch((e: Error) => {
-        if (e.name !== "AbortError") setRemoteError(e.message);
+        if (e.name === "AbortError") return;
+        // fetch 자체가 실패(TypeError)하면 인터넷 문제
+        setRemoteError(e instanceof TypeError ? "인터넷 연결이 불안정해 찾지 못했어요." : e.message);
       });
     return () => ctrl.abort();
-  }, [origin]);
+  }, [origin, tryKey]);
 
   const bells = useMemo<Item[]>(() => {
     if (!origin || !data) return [];
@@ -106,9 +109,21 @@ export default function SafeNearby({ origin, locating, error, data, onRoute, onC
                 {KIND[g.kind].icon} {KIND[g.kind].label} · {KIND[g.kind].note}
               </p>
               {g.items.length === 0 ? (
-                <p className="rounded-xl border border-line px-3 py-2 text-xs text-muted">
-                  {g.kind === "bell" ? "가까운 곳에 비상벨이 없어요." : remoteError ? remoteError : remote ? "근처에서 찾지 못했어요." : "찾는 중…"}
-                </p>
+                <div className="rounded-xl border border-line px-3 py-2 text-xs text-muted">
+                  <p>{g.kind === "bell" ? "가까운 곳에 비상벨이 없어요." : remoteError ? remoteError : remote ? "근처에서 찾지 못했어요." : "찾는 중…"}</p>
+                  {g.kind === "store" && remoteError && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRemoteError(null);
+                        setTryKey((k) => k + 1);
+                      }}
+                      className="mt-1 py-1 text-accent underline underline-offset-2"
+                    >
+                      다시 찾기
+                    </button>
+                  )}
+                </div>
               ) : (
                 <ul className="space-y-1">
                   {g.items.map((it) => (
