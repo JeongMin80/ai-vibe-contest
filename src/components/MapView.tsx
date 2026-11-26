@@ -12,6 +12,8 @@ export interface Point {
   lat: number;
   lng: number;
   label: string;
+  /** 길에 붙이기 전 원래 고른 좌표 (건물이 길에서 떨어져 있어도 도착을 알아채려고) */
+  orig?: { lat: number; lng: number };
 }
 
 interface Props {

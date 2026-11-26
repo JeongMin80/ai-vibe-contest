@@ -28,6 +28,7 @@ import Onboarding from "./Onboarding";
 import SafeNearby from "./SafeNearby";
 import ReportPanel from "./ReportPanel";
 import { fetchReports, reportPenalties, type Report } from "@/lib/reports";
+import { buzz, getVoiceOn, getVoiceServer, pickCue, setVoiceOn, speak, startText, stopVoice, subscribeVoice } from "@/lib/voice";
 
 // Leaflet은 브라우저에서만 동작하므로 서버 렌더링을 끕니다.
 const MapView = dynamic(() => import("./MapView"), {
@@ -91,6 +92,9 @@ export default function MapApp() {
   const [locating, setLocating] = useState(false);
   /** 길 안내 중이면 상태, 아니면 null */
   const [nav, setNav] = useState<NavState | null>(null);
+  /** 음성 안내 켜기·끄기(이 기기에 저장)와 이미 말한 알림 */
+  const voiceOn = useSyncExternalStore(subscribeVoice, getVoiceOn, getVoiceServer);
+  const spokenRef = useRef<Set<string>>(new Set());
   /** 시민 제보: 최근 제보 목록, 제보 작성 중 상태, 고마움 알림 */
   const [reports, setReports] = useState<Report[]>([]);
   const [reporting, setReporting] = useState<{
@@ -250,7 +254,7 @@ export default function MapApp() {
         return;
       }
       setMessage(null);
-      const p = { lat: g.lat[near.node], lng: g.lng[near.node], label };
+      const p = { lat: g.lat[near.node], lng: g.lng[near.node], label, orig: { lat, lng } };
       if (field === "from") {
         setFrom(p);
         fromRef.current = p;
@@ -302,7 +306,7 @@ export default function MapApp() {
   const savePlace = (name: string, isHome: boolean) => {
     const t = to ?? from;
     if (!t) return;
-    const ok = writePlaces(upsertPlace(places, { name, home: isHome, lat: t.lat, lng: t.lng }));
+    const ok = writePlaces(upsertPlace(places, { name, home: isHome, lat: (t.orig ?? t).lat, lng: (t.orig ?? t).lng }));
     if (!ok) setMessage("이 브라우저에서는 저장할 수 없어서, 창을 닫으면 사라져요.");
   };
 
@@ -409,6 +413,7 @@ export default function MapApp() {
           const arrived =
             prev.arrived ||
             (!!dest && distM(me.lat, me.lng, dest.lat, dest.lng) < ARRIVE_M) ||
+            (!!dest?.orig && distM(me.lat, me.lng, dest.orig.lat, dest.orig.lng) < ARRIVE_M) ||
             (!!l && l.total - p.along < ARRIVE_M && p.offset < OFF_ROUTE_M);
           return { ...prev, me, along: p.along, offset: p.offset, offCount: off ? prev.offCount + 1 : 0, arrived, error: null };
         });
@@ -520,16 +525,35 @@ export default function MapApp() {
     setMessage(null);
     setPicking(null);
     setNav({ me: null, along: 0, offset: 0, offCount: 0, arrived: false, follow: true, error: null });
+    spokenRef.current = new Set();
+    // 버튼을 누른 순간에 말해야 아이폰(사파리)에서도 이후 음성 안내가 나옵니다
+    if (voiceOn && line) speak(startText(to?.label ?? "도착지", line.total));
   };
 
   const reroute = () => {
     if (!nav?.me) return;
     void setPoint("from", nav.me.lat, nav.me.lng, "현재 위치");
     setNav((p) => p && { ...p, offCount: 0, along: 0, follow: true });
+    spokenRef.current = new Set();
   };
 
   const navSegment = nav && line && shownSafe ? segmentAt(shownSafe, line, nav.along) : null;
   const navDark = nav && line && shownSafe ? darkAhead(shownSafe, line, nav.along) : null;
+
+  // 음성·진동 안내: 주머니에 넣고 걸어도 이탈·어두운 길·도착을 알 수 있게
+  const destLabel = to?.label ?? "도착지";
+  useEffect(() => {
+    if (!nav?.me) return;
+    const { cue, spoken } = pickCue(
+      { arrived: nav.arrived, offRoute: nav.offCount >= 2 && !nav.arrived, along: nav.along, dark: navDark, destination: destLabel },
+      spokenRef.current
+    );
+    spokenRef.current = spoken;
+    if (cue && voiceOn) {
+      speak(cue.text);
+      buzz(cue.vibrate);
+    }
+  }, [nav, navDark, voiceOn, destLabel]);
 
   return (
     <main className="relative flex-1 min-h-dvh overflow-hidden">
@@ -701,8 +725,13 @@ export default function MapApp() {
               destination={to?.label ?? "도착지"}
               onReroute={reroute}
               onFollow={() => setNav((p) => p && { ...p, follow: true })}
-              onStop={() => setNav(null)}
+              onStop={() => {
+                stopVoice();
+                setNav(null);
+              }}
               onSafe={openSafe}
+              voiceOn={voiceOn}
+              onToggleVoice={() => setVoiceOn(!voiceOn)}
             />
           ) : (
             <>
@@ -750,7 +779,7 @@ export default function MapApp() {
                 target={(() => {
                   // 아직 저장되지 않은 도착지(없으면 출발지)를 저장 후보로
                   const t = to ? { field: "to" as const, ...to } : from ? { field: "from" as const, ...from } : null;
-                  return t && !findNear(places, t.lat, t.lng) ? t : null;
+                  return t && !findNear(places, (t.orig ?? t).lat, (t.orig ?? t).lng) ? t : null;
                 })()}
                 onPick={(lat, lng, name) => void setPoint(picking ?? (!from ? "from" : "to"), lat, lng, name)}
                 onRemove={(id) => writePlaces(removePlace(places, id))}

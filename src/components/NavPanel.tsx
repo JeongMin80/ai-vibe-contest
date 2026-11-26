@@ -23,12 +23,15 @@ interface Props {
   onStop: () => void;
   /** 가까운 안전한 곳 열기 */
   onSafe?: () => void;
+  /** 음성·진동 안내 */
+  voiceOn: boolean;
+  onToggleVoice: () => void;
 }
 
 const meters = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${Math.max(0, Math.round(m / 10) * 10)}m`);
 
 /** 걸으면서 보는 안내 화면 (지도를 많이 가리지 않게 작게) */
-export default function NavPanel({ nav, total, segment, dark, destination, onReroute, onFollow, onStop, onSafe }: Props) {
+export default function NavPanel({ nav, total, segment, dark, destination, onReroute, onFollow, onStop, onSafe, voiceOn, onToggleVoice }: Props) {
   const remaining = Math.max(0, total - nav.along);
   const minutes = Math.max(1, Math.round(remaining / 75));
   const offRoute = nav.offCount >= 2 && !nav.arrived;
@@ -78,7 +81,18 @@ export default function NavPanel({ nav, total, segment, dark, destination, onRer
         </>
       )}
 
-      <div className="mt-3 flex gap-2">
+      {!nav.arrived && (
+        <button
+          type="button"
+          onClick={onToggleVoice}
+          aria-pressed={voiceOn}
+          className="mt-2 py-1.5 text-xs text-muted underline underline-offset-2"
+        >
+          {voiceOn ? "🔊 음성·진동 안내 켜짐 · 끄기" : "🔇 음성·진동 안내 꺼짐 · 켜기"}
+        </button>
+      )}
+
+      <div className="mt-2 flex gap-2">
         {!nav.follow && nav.me && !nav.arrived && (
           <button type="button" onClick={onFollow} className="rounded-xl border border-line px-3 py-2.5 text-xs">
             내 위치로
