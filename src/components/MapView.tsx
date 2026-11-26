@@ -23,6 +23,12 @@ interface Props {
   /** 지도를 누르면 호출 (경로 모드일 때만) */
   onPick?: (lat: number, lng: number) => void;
   picking: boolean;
+  /** 길 안내 중 내 위치 */
+  me?: { lat: number; lng: number; acc: number } | null;
+  /** 내 위치를 따라 지도를 움직일지 */
+  follow?: boolean;
+  /** 사용자가 지도를 직접 끌었을 때 (따라가기 해제용) */
+  onUserMove?: () => void;
 }
 
 const COLORS: Record<LayerId, string> = {
@@ -41,16 +47,19 @@ function pinIcon(letter: string, color: string) {
   });
 }
 
-export default function MapView({ data, graph, visible, from, to, safe, short, onPick, picking }: Props) {
+export default function MapView({ data, graph, visible, from, to, safe, short, onPick, picking, me, follow, onUserMove }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const groupsRef = useRef<Partial<Record<LayerId, L.LayerGroup>>>({});
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
   const pinLayerRef = useRef<L.LayerGroup | null>(null);
   const onPickRef = useRef(onPick);
+  const onUserMoveRef = useRef(onUserMove);
+  const meLayerRef = useRef<L.LayerGroup | null>(null);
   useEffect(() => {
     onPickRef.current = onPick;
-  }, [onPick]);
+    onUserMoveRef.current = onUserMove;
+  }, [onPick, onUserMove]);
 
   // 지도 생성 (한 번만)
   useEffect(() => {
@@ -99,6 +108,9 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
     routeLayerRef.current = L.layerGroup().addTo(map);
     pinLayerRef.current = L.layerGroup().addTo(map);
     map.on("click", (e: L.LeafletMouseEvent) => onPickRef.current?.(e.latlng.lat, e.latlng.lng));
+    // 사용자가 직접 끌면 "따라가기"를 멈춤 (코드로 움직인 것은 dragstart가 생기지 않음)
+    map.on("dragstart", () => onUserMoveRef.current?.());
+    meLayerRef.current = L.layerGroup().addTo(map);
 
     mapRef.current = map;
     return () => {
@@ -193,6 +205,31 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
       if (!visible[id] && map.hasLayer(group)) group.remove();
     }
   }, [visible, data, graph]);
+
+  // 길 안내: 내 위치 표시와 따라가기
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = meLayerRef.current;
+    if (!map || !layer) return;
+    layer.clearLayers();
+    if (!me) return;
+    L.circle([me.lat, me.lng], {
+      radius: Math.min(me.acc, 100),
+      color: "#4ea8ff",
+      weight: 1,
+      fillOpacity: 0.12,
+      interactive: false,
+    }).addTo(layer);
+    L.circleMarker([me.lat, me.lng], {
+      radius: 8,
+      color: "#fff",
+      weight: 3,
+      fillColor: "#4ea8ff",
+      fillOpacity: 1,
+      interactive: false,
+    }).addTo(layer);
+    if (follow) map.panTo([me.lat, me.lng], { animate: true });
+  }, [me, follow]);
 
   // 출발·도착 핀
   useEffect(() => {

@@ -4,6 +4,8 @@ interface Props {
   safe: Route;
   short: Route;
   same: boolean;
+  /** 안심 경로로 길 안내 시작 */
+  onStart?: () => void;
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -53,7 +55,7 @@ function Card({ title, route, highlight }: { title: string; route: Route; highli
   );
 }
 
-export default function RouteResult({ safe, short, same }: Props) {
+export default function RouteResult({ safe, short, same, onStart }: Props) {
   const extraMin = safe.minutes - short.minutes;
   const lessDark = short.darkLength - safe.darkLength;
   const darkest = safe.darkStretches[0];
@@ -69,6 +71,16 @@ export default function RouteResult({ safe, short, same }: Props) {
           <b className="text-accent">{extraMin > 0 ? `${extraMin}분 더 걷고` : "거의 같은 시간에"}</b>, 어두운 길을{" "}
           <b className="text-accent">{meters(Math.max(0, lessDark))}</b> 줄여요.
         </p>
+      )}
+
+      {onStart && (
+        <button
+          type="button"
+          onClick={onStart}
+          className="mb-2 w-full rounded-2xl bg-safe py-3 text-sm font-bold text-bg shadow-[0_0_20px_rgba(52,211,153,0.25)] active:scale-[0.99]"
+        >
+          ▶ 안심 경로로 길 안내 시작
+        </button>
       )}
 
       <div className="flex gap-2">

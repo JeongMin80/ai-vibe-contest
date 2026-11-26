@@ -4,7 +4,9 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { LAYERS, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
-import { FLAG_STREETLIGHT, findRoute, loadGraph, nearestNode, sameRoute, type Graph, type Route } from "@/lib/routing";
+import { FLAG_STREETLIGHT, distM, findRoute, loadGraph, nearestNode, sameRoute, type Graph, type Route } from "@/lib/routing";
+import { ARRIVE_M, OFF_ROUTE_M, buildLine, darkAhead, locate, segmentAt, type RouteLine } from "@/lib/navigation";
+import NavPanel, { type NavState } from "./NavPanel";
 import type { Point } from "./MapView";
 import {
   findNear,
@@ -42,6 +44,8 @@ export default function MapApp() {
   const [level, setLevel] = useState<Level>("mid");
   const [message, setMessage] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
+  /** 길 안내 중이면 상태, 아니면 null */
+  const [nav, setNav] = useState<NavState | null>(null);
   const graphPromise = useRef<Promise<Graph> | null>(null);
   // 비동기 콜백(현재 위치 등)에서도 최신 출발·도착을 보도록
   const fromRef = useRef<Point | null>(null);
@@ -86,6 +90,7 @@ export default function MapApp() {
   };
 
   const closeRouteMode = () => {
+    setNav(null);
     setMode("browse");
     setPicking(null);
     setFrom(null);
@@ -142,12 +147,13 @@ export default function MapApp() {
 
   const onMapPick = useCallback(
     (lat: number, lng: number) => {
-      if (mode !== "route") return;
+      // 길 안내 중에는 지도를 눌러도 출발·도착이 바뀌지 않게
+      if (mode !== "route" || nav) return;
       const field: Field | null = picking ?? (!from ? "from" : !to ? "to" : null);
       if (!field) return;
       void setPoint(field, lat, lng, "지도에서 고른 곳");
     },
-    [mode, picking, from, to, setPoint]
+    [mode, nav, picking, from, to, setPoint]
   );
 
   const locateMe = (field: Field) => {
@@ -210,6 +216,84 @@ export default function MapApp() {
   const shownSafe: Route | null = routes?.safe ?? null;
   const shownShort: Route | null = routes && !routes.same ? routes.short : null;
 
+  // ---------- 길 안내 ----------
+  const navActive = nav !== null;
+  const line = useMemo(() => (routes?.safe ? buildLine(routes.safe) : null), [routes]);
+  const lineRef = useRef<RouteLine | null>(null);
+  useEffect(() => {
+    lineRef.current = line;
+  }, [line]);
+
+  // 안내 중에는 위치를 계속 받아서 경로 위 위치·이탈·도착을 계산
+  useEffect(() => {
+    if (!navActive || !("geolocation" in navigator)) return;
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        const me = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy ?? 30 };
+        const l = lineRef.current;
+        const dest = toRef.current;
+        setNav((prev) => {
+          if (!prev) return prev;
+          const p = l ? locate(l, me.lat, me.lng) : { along: prev.along, offset: 0 };
+          // GPS 오차만큼은 봐줌 (최대 30m)
+          const off = p.offset > OFF_ROUTE_M + Math.min(me.acc, 30);
+          const arrived =
+            prev.arrived ||
+            (!!dest && distM(me.lat, me.lng, dest.lat, dest.lng) < ARRIVE_M) ||
+            (!!l && l.total - p.along < ARRIVE_M && p.offset < OFF_ROUTE_M);
+          return { ...prev, me, along: p.along, offset: p.offset, offCount: off ? prev.offCount + 1 : 0, arrived, error: null };
+        });
+      },
+      (err) =>
+        setNav((prev) =>
+          prev && {
+            ...prev,
+            error:
+              err.code === err.PERMISSION_DENIED
+                ? "위치 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 위치를 허용해 주세요."
+                : "현재 위치를 찾지 못했어요. 하늘이 보이는 곳에서 잠시 기다려 주세요.",
+          }
+        ),
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+    );
+    // 걷는 동안 화면이 꺼지지 않게 (지원하는 브라우저만)
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    if ("wakeLock" in navigator) {
+      navigator.wakeLock
+        .request("screen")
+        .then((l) => {
+          if (cancelled) void l.release();
+          else lock = l;
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+      navigator.geolocation.clearWatch(id);
+      void lock?.release().catch(() => {});
+    };
+  }, [navActive]);
+
+  const startNav = () => {
+    if (!("geolocation" in navigator)) {
+      setMessage("이 브라우저에서는 현재 위치를 쓸 수 없어서 길 안내를 할 수 없어요.");
+      return;
+    }
+    setMessage(null);
+    setPicking(null);
+    setNav({ me: null, along: 0, offset: 0, offCount: 0, arrived: false, follow: true, error: null });
+  };
+
+  const reroute = () => {
+    if (!nav?.me) return;
+    void setPoint("from", nav.me.lat, nav.me.lng, "현재 위치");
+    setNav((p) => p && { ...p, offCount: 0, along: 0, follow: true });
+  };
+
+  const navSegment = nav && line && shownSafe ? segmentAt(shownSafe, line, nav.along) : null;
+  const navDark = nav && line && shownSafe ? darkAhead(shownSafe, line, nav.along) : null;
+
   return (
     <main className="relative flex-1 min-h-dvh overflow-hidden">
       <MapView
@@ -221,7 +305,10 @@ export default function MapApp() {
         safe={mode === "route" ? shownSafe : null}
         short={mode === "route" ? shownShort : null}
         onPick={onMapPick}
-        picking={mode === "route" && picking !== null}
+        picking={mode === "route" && picking !== null && !nav}
+        me={nav?.me ?? null}
+        follow={nav?.follow ?? false}
+        onUserMove={() => setNav((p) => (p && p.follow ? { ...p, follow: false } : p))}
       />
 
       {/* 상단: 서비스 이름 / 선택 안내 */}
@@ -300,6 +387,17 @@ export default function MapApp() {
                 {home ? "다른 곳으로 경로 찾기" : "안심 경로 찾기"}
               </button>
             </>
+          ) : nav && shownSafe && line ? (
+            <NavPanel
+              nav={nav}
+              total={line.total}
+              segment={navSegment}
+              dark={navDark}
+              destination={to?.label ?? "도착지"}
+              onReroute={reroute}
+              onFollow={() => setNav((p) => p && { ...p, follow: true })}
+              onStop={() => setNav(null)}
+            />
           ) : (
             <>
               <div className="mb-3 flex items-center justify-between">
@@ -371,7 +469,7 @@ export default function MapApp() {
               {!graph && <p className="mt-3 text-xs text-muted">길 데이터를 불러오는 중…</p>}
               {routes?.failed && <p className="mt-3 text-sm text-danger">두 지점을 잇는 길을 찾지 못했어요.</p>}
               {routes && routes.safe && routes.short && (
-                <RouteResult safe={routes.safe} short={routes.short} same={routes.same} />
+                <RouteResult safe={routes.safe} short={routes.short} same={routes.same} onStart={startNav} />
               )}
             </>
           )}
