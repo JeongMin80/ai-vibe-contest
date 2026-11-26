@@ -228,7 +228,14 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
       fillOpacity: 1,
       interactive: false,
     }).addTo(layer);
-    if (follow) map.panTo([me.lat, me.lng], { animate: true });
+    if (follow) {
+      // 패널에 가리지 않게: 휴대폰은 내 위치가 화면 위쪽에, 넓은 화면은 왼쪽 패널 오른편에 오도록
+      const zoom = map.getZoom();
+      const wide = window.innerWidth >= 768;
+      const offset = wide ? L.point(-200, 0) : L.point(0, Math.round(window.innerHeight * 0.22));
+      const center = map.unproject(map.project([me.lat, me.lng], zoom).add(offset), zoom);
+      map.panTo(center, { animate: true });
+    }
   }, [me, follow]);
 
   // 출발·도착 핀

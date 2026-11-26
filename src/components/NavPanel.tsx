@@ -21,12 +21,14 @@ interface Props {
   onReroute: () => void;
   onFollow: () => void;
   onStop: () => void;
+  /** 가까운 안전한 곳 열기 */
+  onSafe?: () => void;
 }
 
 const meters = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)}km` : `${Math.max(0, Math.round(m / 10) * 10)}m`);
 
 /** 걸으면서 보는 안내 화면 (지도를 많이 가리지 않게 작게) */
-export default function NavPanel({ nav, total, segment, dark, destination, onReroute, onFollow, onStop }: Props) {
+export default function NavPanel({ nav, total, segment, dark, destination, onReroute, onFollow, onStop, onSafe }: Props) {
   const remaining = Math.max(0, total - nav.along);
   const minutes = Math.max(1, Math.round(remaining / 75));
   const offRoute = nav.offCount >= 2 && !nav.arrived;
@@ -85,6 +87,11 @@ export default function NavPanel({ nav, total, segment, dark, destination, onRer
         <a href="tel:112" className="rounded-xl bg-danger px-4 py-2.5 text-sm font-bold text-white">
           112
         </a>
+        {onSafe && !nav.arrived && (
+          <button type="button" onClick={onSafe} className="rounded-xl border border-danger/60 px-3 py-2.5 text-xs font-bold text-danger">
+            🆘 주변
+          </button>
+        )}
         <button type="button" onClick={onStop} className="flex-1 rounded-xl border border-line py-2.5 text-sm font-bold">
           {nav.arrived ? "닫기" : "안내 끝내기"}
         </button>

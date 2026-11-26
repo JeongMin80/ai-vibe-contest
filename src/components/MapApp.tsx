@@ -20,6 +20,7 @@ import {
 import MyPlaces from "./MyPlaces";
 import PlaceField from "./PlaceField";
 import RouteResult from "./RouteResult";
+import SafeNearby from "./SafeNearby";
 
 // Leaflet은 브라우저에서만 동작하므로 서버 렌더링을 끕니다.
 const MapView = dynamic(() => import("./MapView"), {
@@ -275,6 +276,51 @@ export default function MapApp() {
     };
   }, [navActive]);
 
+  // ---------- 가까운 안전한 곳 ----------
+  const [safe, setSafe] = useState<{ origin: { lat: number; lng: number } | null; locating: boolean; error: string | null } | null>(
+    null
+  );
+
+  const openSafe = () => {
+    // 길 안내 중이면 이미 아는 위치를 바로 씀
+    if (nav?.me) {
+      setSafe({ origin: { lat: nav.me.lat, lng: nav.me.lng }, locating: false, error: null });
+      return;
+    }
+    if (!("geolocation" in navigator)) {
+      setSafe({ origin: null, locating: false, error: "이 브라우저에서는 현재 위치를 쓸 수 없어요. 위급하면 112에 전화하세요." });
+      return;
+    }
+    setSafe({ origin: null, locating: true, error: null });
+    navigator.geolocation.getCurrentPosition(
+      (pos) => setSafe((s) => s && { origin: { lat: pos.coords.latitude, lng: pos.coords.longitude }, locating: false, error: null }),
+      (err) =>
+        setSafe(
+          (s) =>
+            s && {
+              origin: null,
+              locating: false,
+              error:
+                err.code === err.PERMISSION_DENIED
+                  ? "위치 권한이 꺼져 있어 주변을 찾을 수 없어요. 위급하면 112에 전화하세요."
+                  : "현재 위치를 찾지 못했어요. 위급하면 112에 전화하세요.",
+            }
+        ),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  /** 고른 안전한 곳까지 안심 경로: 출발 = 지금 위치 */
+  const routeToSafe = async (lat: number, lng: number, name: string) => {
+    const origin = safe?.origin;
+    setSafe(null);
+    setNav(null);
+    setMode("route");
+    setMessage(null);
+    if (origin) await setPoint("from", origin.lat, origin.lng, "현재 위치");
+    await setPoint("to", lat, lng, name);
+  };
+
   const startNav = () => {
     if (!("geolocation" in navigator)) {
       setMessage("이 브라우저에서는 현재 위치를 쓸 수 없어서 길 안내를 할 수 없어요.");
@@ -306,8 +352,9 @@ export default function MapApp() {
         short={mode === "route" ? shownShort : null}
         onPick={onMapPick}
         picking={mode === "route" && picking !== null && !nav}
-        me={nav?.me ?? null}
-        follow={nav?.follow ?? false}
+        // 길 안내 중이거나 "가까운 안전한 곳"을 열었을 때 내 위치를 보여줌
+        me={nav?.me ?? (safe?.origin ? { ...safe.origin, acc: 20 } : null)}
+        follow={nav ? nav.follow : !!safe?.origin}
         onUserMove={() => setNav((p) => (p && p.follow ? { ...p, follow: false } : p))}
       />
 
@@ -334,7 +381,16 @@ export default function MapApp() {
         className="absolute inset-x-0 bottom-0 z-[1000] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:inset-x-auto md:bottom-auto md:left-0 md:top-16 md:w-[400px]"
       >
         <div className="mx-auto max-h-[55dvh] max-w-xl overflow-y-auto rounded-3xl border border-line bg-panel/95 p-4 shadow-2xl backdrop-blur md:max-h-[calc(100dvh-5.5rem)]">
-          {mode === "browse" ? (
+          {safe ? (
+            <SafeNearby
+              origin={safe.origin}
+              locating={safe.locating}
+              error={safe.error}
+              data={data}
+              onRoute={(lat, lng, name) => void routeToSafe(lat, lng, name)}
+              onClose={() => setSafe(null)}
+            />
+          ) : mode === "browse" ? (
             <>
               <div className="mb-3 flex items-center justify-between gap-2">
                 <p className="text-sm font-bold">지도에 표시할 안전시설</p>
@@ -386,6 +442,13 @@ export default function MapApp() {
               >
                 {home ? "다른 곳으로 경로 찾기" : "안심 경로 찾기"}
               </button>
+              <button
+                type="button"
+                onClick={openSafe}
+                className="mt-2 w-full rounded-2xl border border-danger/60 py-2.5 text-sm font-bold text-danger active:scale-[0.99]"
+              >
+                🆘 가까운 안전한 곳 · 112
+              </button>
             </>
           ) : nav && shownSafe && line ? (
             <NavPanel
@@ -397,6 +460,7 @@ export default function MapApp() {
               onReroute={reroute}
               onFollow={() => setNav((p) => p && { ...p, follow: true })}
               onStop={() => setNav(null)}
+              onSafe={openSafe}
             />
           ) : (
             <>
