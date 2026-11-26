@@ -2,10 +2,20 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LAYERS, PLACES, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { LAYERS, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
 import { FLAG_STREETLIGHT, findRoute, loadGraph, nearestNode, sameRoute, type Graph, type Route } from "@/lib/routing";
 import type { Point } from "./MapView";
+import {
+  findNear,
+  getPlacesServerSnapshot,
+  getPlacesSnapshot,
+  removePlace,
+  subscribePlaces,
+  upsertPlace,
+  writePlaces,
+} from "@/lib/savedPlaces";
+import MyPlaces from "./MyPlaces";
 import PlaceField from "./PlaceField";
 import RouteResult from "./RouteResult";
 
@@ -33,6 +43,17 @@ export default function MapApp() {
   const [message, setMessage] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
   const graphPromise = useRef<Promise<Graph> | null>(null);
+  // 비동기 콜백(현재 위치 등)에서도 최신 출발·도착을 보도록
+  const fromRef = useRef<Point | null>(null);
+  const toRef = useRef<Point | null>(null);
+  useEffect(() => {
+    fromRef.current = from;
+    toRef.current = to;
+  }, [from, to]);
+
+  // 내 장소: 이 기기의 저장소에서 읽음 (서버 렌더링 때는 빈 목록)
+  const places = useSyncExternalStore(subscribePlaces, getPlacesSnapshot, getPlacesServerSnapshot);
+  const home = places.find((p) => p.home) ?? null;
 
   useEffect(() => {
     loadFacilities()
@@ -83,14 +104,41 @@ export default function MapApp() {
       }
       setMessage(null);
       const p = { lat: g.lat[near.node], lng: g.lng[near.node], label };
-      if (field === "from") setFrom(p);
-      else setTo(p);
+      if (field === "from") {
+        setFrom(p);
+        fromRef.current = p;
+      } else {
+        setTo(p);
+        toRef.current = p;
+      }
       // 다음에 채울 칸으로 자동 이동
-      const other = field === "from" ? to : from;
+      const other = field === "from" ? toRef.current : fromRef.current;
       setPicking(other ? null : field === "from" ? "to" : "from");
     },
-    [ensureGraph, from, to]
+    [ensureGraph]
   );
+
+  /** 🏠 집으로 안심 귀가: 도착지 = 집, 출발지 = 현재 위치 */
+  const goHome = () => {
+    if (!home) return;
+    setMode("route");
+    setMessage(null);
+    const h = { lat: home.lat, lng: home.lng, label: `🏠 ${home.name}` };
+    setTo(h);
+    toRef.current = h;
+    setFrom(null);
+    fromRef.current = null;
+    setPicking("from");
+    void ensureGraph();
+    locateMe("from");
+  };
+
+  const savePlace = (name: string, isHome: boolean) => {
+    const t = to ?? from;
+    if (!t) return;
+    const ok = writePlaces(upsertPlace(places, { name, home: isHome, lat: t.lat, lng: t.lng }));
+    if (!ok) setMessage("이 브라우저에서는 저장할 수 없어서, 창을 닫으면 사라져요.");
+  };
 
   const onMapPick = useCallback(
     (lat: number, lng: number) => {
@@ -231,12 +279,25 @@ export default function MapApp() {
                   );
                 })}
               </div>
+              {home && (
+                <button
+                  type="button"
+                  onClick={goHome}
+                  className="mt-3 w-full rounded-2xl bg-accent py-3.5 text-base font-bold text-accent-ink shadow-[0_0_24px_rgba(255,209,102,0.25)] active:scale-[0.99]"
+                >
+                  🏠 {home.name}까지 안심 귀가
+                </button>
+              )}
               <button
                 type="button"
                 onClick={startRouteMode}
-                className="mt-3 w-full rounded-2xl bg-accent py-3.5 text-base font-bold text-accent-ink shadow-[0_0_24px_rgba(255,209,102,0.25)] active:scale-[0.99]"
+                className={
+                  home
+                    ? "mt-2 w-full rounded-2xl border border-accent py-3 text-sm font-bold text-accent active:scale-[0.99]"
+                    : "mt-3 w-full rounded-2xl bg-accent py-3.5 text-base font-bold text-accent-ink shadow-[0_0_24px_rgba(255,209,102,0.25)] active:scale-[0.99]"
+                }
               >
-                안심 경로 찾기
+                {home ? "다른 곳으로 경로 찾기" : "안심 경로 찾기"}
               </button>
             </>
           ) : (
@@ -277,18 +338,17 @@ export default function MapApp() {
                 </button>
               </div>
 
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {PLACES.map((p) => (
-                  <button
-                    key={p.name}
-                    type="button"
-                    onClick={() => void setPoint(picking ?? (!from ? "from" : "to"), p.lat, p.lng, p.name)}
-                    className="rounded-full border border-line px-3 py-1 text-xs text-muted"
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
+              <MyPlaces
+                places={places}
+                target={(() => {
+                  // 아직 저장되지 않은 도착지(없으면 출발지)를 저장 후보로
+                  const t = to ? { field: "to" as const, ...to } : from ? { field: "from" as const, ...from } : null;
+                  return t && !findNear(places, t.lat, t.lng) ? t : null;
+                })()}
+                onPick={(lat, lng, name) => void setPoint(picking ?? (!from ? "from" : "to"), lat, lng, name)}
+                onRemove={(id) => writePlaces(removePlace(places, id))}
+                onSave={savePlace}
+              />
 
               <div className="mt-3 flex items-center justify-between gap-3">
                 <span className="text-xs text-muted">안전 우선 정도</span>
