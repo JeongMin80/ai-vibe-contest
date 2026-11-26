@@ -5,9 +5,10 @@
 // - /api/* (카카오 장소 검색 결과: 카카오 정책상 저장 금지, 항상 실시간)
 // - 다른 사이트의 요청 (지도 타일 등)
 
-const VERSION = "v2";
+const VERSION = "v3";
 const CACHE = `hwanhangil-${VERSION}`;
-const PRECACHE = ["/", "/about", "/data/facilities.json", "/data/graph.json", "/icons/icon-192.png"];
+// 처음 여는 지역(전주) 데이터만 미리 받아 두고, 다른 지역은 열었을 때 캐시합니다
+const PRECACHE = ["/", "/about", "/data/jeonju/facilities.json", "/data/jeonju/graph.json", "/icons/icon-192.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

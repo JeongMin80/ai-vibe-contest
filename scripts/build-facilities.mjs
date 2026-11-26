@@ -1,16 +1,17 @@
 // 수집한 안전시설 원본(data/safety/*.json)을 웹에서 쓰기 좋은 작은 파일로 가공합니다.
 // 실행: node scripts/build-facilities.mjs
-// 결과: public/data/facilities.json
+// 실행: node scripts/build-facilities.mjs <전주시|군산시|제주시>
+// 결과: public/data/<지역>/facilities.json
 //   { updated, sources, cctv: [[lat, lng, cams]], bell: [[lat, lng, "설치장소"]], lamp: [[lat, lng]], street: [[lat, lng]] }
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 
 const root = new URL("../", import.meta.url);
-const AREA = "전주시";
+import { regionFromArgs } from "./regions.mjs";
+const { area: AREA, slug: SLUG, box: BOX } = regionFromArgs();
 const r6 = (n) => Math.round(n * 1e6) / 1e6; // 소수점 6자리 ≈ 10cm 정밀도
 
 // 서비스 지역(도로망을 받은 범위)보다 조금 넓게만 남겨 파일 크기를 줄입니다.
-const BOX = { south: 35.79, west: 127.1, north: 35.87, east: 127.175 };
 const inBox = (p) => p.lat >= BOX.south && p.lat <= BOX.north && p.lng >= BOX.west && p.lng <= BOX.east;
 
 function load(name) {
@@ -58,10 +59,10 @@ const out = {
   street,
 };
 
-mkdirSync(new URL("public/data/", root), { recursive: true });
+mkdirSync(new URL(`public/data/${SLUG}/`, root), { recursive: true });
 const json = JSON.stringify(out);
-writeFileSync(new URL("public/data/facilities.json", root), json);
+writeFileSync(new URL(`public/data/${SLUG}/facilities.json`, root), json);
 console.log(
   `CCTV ${cctv.length}곳(원본 ${cctvRaw.length}) · 비상벨 ${bell.length} · 보안등 ${lamp.length} · 가로등 ${street.length}`
 );
-console.log(`public/data/facilities.json ${(json.length / 1024).toFixed(0)}KB`);
+console.log(`public/data/${SLUG}/facilities.json ${(json.length / 1024).toFixed(0)}KB`);

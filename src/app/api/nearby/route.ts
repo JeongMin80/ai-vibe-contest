@@ -1,8 +1,8 @@
 // 가까운 안전한 곳: 지금 위치 주변의 편의점, 지구대·파출소를 카카오 로컬 API로 실시간 조회합니다.
 // - 카카오 이용 정책상 결과를 저장·캐시하지 않습니다(no-store). 매번 실시간으로 부릅니다.
-// - 비상벨은 공공데이터(public/data/facilities.json)로 브라우저에서 계산하므로 여기서는 다루지 않습니다.
+// - 비상벨은 공공데이터(public/data/<지역>/facilities.json)로 브라우저에서 계산하므로 여기서는 다루지 않습니다.
 
-import { SERVICE_AREA } from "@/lib/facilities";
+import { regionOf } from "@/lib/regions";
 
 export interface NearbyPlace {
   kind: "store" | "police";
@@ -62,12 +62,9 @@ export async function GET(request: Request) {
   if (
     !Number.isFinite(lat) ||
     !Number.isFinite(lng) ||
-    lat < SERVICE_AREA.south - margin ||
-    lat > SERVICE_AREA.north + margin ||
-    lng < SERVICE_AREA.west - margin ||
-    lng > SERVICE_AREA.east + margin
+    !regionOf(lat, lng, margin)
   ) {
-    return Response.json({ error: "서비스 지역(전북대·전주교대 주변)에서만 쓸 수 있어요." }, { status: 400, headers: NO_STORE });
+    return Response.json({ error: "서비스 지역(대학가 주변)에서만 쓸 수 있어요." }, { status: 400, headers: NO_STORE });
   }
 
   const at = { x: String(lng), y: String(lat), sort: "distance" };

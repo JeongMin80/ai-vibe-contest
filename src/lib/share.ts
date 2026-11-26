@@ -2,7 +2,7 @@
 // 예) https://hwanhangil.vercel.app/?f=35.84807,127.13201,현재 위치&t=35.84276,127.128,CU 전북대타운점&l=mid
 // - 받은 링크는 믿을 수 없는 입력이므로 좌표 범위·이름 길이를 검사합니다.
 
-import { SERVICE_AREA } from "./facilities.ts";
+import { regionOf } from "./regions.ts";
 
 export type ShareLevel = "low" | "mid" | "high";
 
@@ -33,13 +33,8 @@ function parsePoint(v: string | null): SharePoint | undefined {
   const lat = Number(a);
   const lng = Number(b);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
-  if (
-    lat < SERVICE_AREA.south - MARGIN ||
-    lat > SERVICE_AREA.north + MARGIN ||
-    lng < SERVICE_AREA.west - MARGIN ||
-    lng > SERVICE_AREA.east + MARGIN
-  )
-    return undefined;
+  // 서비스 지역(전주·군산·제주 대학가) 중 한 곳 근처여야 함
+  if (!regionOf(lat, lng, MARGIN)) return undefined;
   // 이름에 들어 있는 제어 문자는 지우고 길이를 제한
   const label = rest.join(",").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_LABEL) || "공유받은 위치";
   return { lat, lng, label };

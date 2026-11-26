@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { PLACES } from "@/lib/facilities";
 import type { SavedPlace } from "@/lib/savedPlaces";
 
 interface Target {
@@ -13,6 +12,8 @@ interface Target {
 
 interface Props {
   places: SavedPlace[];
+  /** 지금 지역의 캠퍼스 바로가기 */
+  campuses: { name: string; lat: number; lng: number }[];
   /** 저장할 수 있는 지점 (아직 저장 안 된 도착지 또는 출발지) */
   target: Target | null;
   onPick: (lat: number, lng: number, name: string) => void;
@@ -23,7 +24,7 @@ interface Props {
 const GENERIC_LABELS = new Set(["지도에서 고른 곳", "현재 위치"]);
 
 /** 내 장소 칩(집·자주 가는 곳) + 캠퍼스 바로가기 + 지금 지점 저장하기 */
-export default function MyPlaces({ places, target, onPick, onRemove, onSave }: Props) {
+export default function MyPlaces({ places, campuses, target, onPick, onRemove, onSave }: Props) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState("");
   const [manage, setManage] = useState(false);
@@ -57,7 +58,7 @@ export default function MyPlaces({ places, target, onPick, onRemove, onSave }: P
             )}
           </span>
         ))}
-        {PLACES.map((p) => (
+        {campuses.map((p) => (
           <button
             key={p.name}
             type="button"

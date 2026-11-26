@@ -36,7 +36,7 @@ check(isNight(new Date("2026-11-26T18:00:00+09:00"), ...JEONJU), "11월 오후 6
 check(!isNight(new Date("2026-06-21T19:00:00+09:00"), ...JEONJU), "6월 오후 7시는 아직 낮");
 
 // 밤 경로: 조명 없는 산길·공원길을 덜 지나야 함
-const g = buildGraph(JSON.parse(readFileSync(new URL("../public/data/graph.json", import.meta.url), "utf8")));
+const g = buildGraph(JSON.parse(readFileSync(new URL("../public/data/jeonju/graph.json", import.meta.url), "utf8")));
 const PAIRS = [
   [[35.8475, 127.1205], [35.858, 127.126]], // 덕진공원 → 송천동
   [[35.8468, 127.1294], [35.852, 127.142]], // 전북대 → 건지산 쪽

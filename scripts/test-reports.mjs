@@ -12,7 +12,7 @@ const check = (cond, msg) => {
   }
 };
 
-const g = buildGraph(JSON.parse(readFileSync(new URL("../public/data/graph.json", import.meta.url), "utf8")));
+const g = buildGraph(JSON.parse(readFileSync(new URL("../public/data/jeonju/graph.json", import.meta.url), "utf8")));
 const A = nearestNode(g, 35.8483, 127.132).node; // 중앙도서관 쪽
 const B = nearestNode(g, 35.8428, 127.1278).node; // 원룸촌 쪽
 const base = findRoute(g, A, B, 3);

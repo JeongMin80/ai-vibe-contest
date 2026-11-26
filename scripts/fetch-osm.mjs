@@ -5,9 +5,18 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 
-const AREA = "전주시";
-// 전북대·전주교대 주변을 넉넉히 덮는 범위: 남, 서, 북, 동
-const BBOX = [35.795, 127.105, 35.865, 127.17].join(",");
+// 지역별 범위: 남, 서, 북, 동 (각 대학 주변 원룸촌을 넉넉히 덮음)
+const REGION_BOXES = {
+  전주시: [35.795, 127.105, 35.865, 127.17], // 전북대·전주교대
+  군산시: [35.93, 126.64, 35.985, 126.72], // 국립군산대(미룡동)·나운동
+  제주시: [33.445, 126.5, 33.52, 126.585], // 제주대(아라동)·이도동
+};
+const AREA = process.argv[2] ?? "전주시";
+if (!REGION_BOXES[AREA]) {
+  console.error(`사용법: node scripts/fetch-osm.mjs <${Object.keys(REGION_BOXES).join("|")}>`);
+  process.exit(1);
+}
+const BBOX = REGION_BOXES[AREA].join(",");
 
 const SERVERS = [
   "https://overpass-api.de/api/interpreter",

@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { buildGraph, findRoute, nearestNode, sameRoute, edgeCost } from "../src/lib/routing.ts";
 
-const raw = JSON.parse(readFileSync(new URL("../public/data/graph.json", import.meta.url), "utf8"));
+const raw = JSON.parse(readFileSync(new URL("../public/data/jeonju/graph.json", import.meta.url), "utf8"));
 const t0 = performance.now();
 const g = buildGraph(raw);
 console.log(`그래프 준비 ${(performance.now() - t0).toFixed(0)}ms, 교차점 ${g.nodeCount}`);

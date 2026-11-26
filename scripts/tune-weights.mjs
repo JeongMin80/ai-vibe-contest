@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { buildGraph, findRoute, nearestNode } from "../src/lib/routing.ts";
 
-const g = buildGraph(JSON.parse(readFileSync(new URL("../public/data/graph.json", import.meta.url), "utf8")));
+const g = buildGraph(JSON.parse(readFileSync(new URL("../public/data/jeonju/graph.json", import.meta.url), "utf8")));
 
 // 전북대·전주교대 주변의 실제 귀갓길 예시
 const PAIRS = [

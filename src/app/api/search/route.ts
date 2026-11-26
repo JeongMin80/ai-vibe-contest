@@ -1,9 +1,9 @@
 // 장소 검색 API: 카카오 로컬 API를 서버에서 대신 호출합니다.
 // - 카카오 REST 키(KAKAO_REST_API_KEY)는 서버 환경변수에만 두고 브라우저에 보내지 않습니다.
 // - 카카오 이용 정책상 검색 결과를 저장하면 안 되므로 서버·CDN 캐시를 모두 끕니다(no-store).
-// - 결과는 서비스 지역(전북대·전주교대 주변) 안의 장소만 돌려줍니다.
+// - 결과는 고른 지역(?region=jeonju|gunsan|jeju)의 서비스 범위 안 장소만 돌려줍니다.
 
-import { SERVICE_AREA } from "@/lib/facilities";
+import { DEFAULT_REGION, REGIONS, inArea, type Area } from "@/lib/regions";
 
 export interface SearchResult {
   name: string;
@@ -14,11 +14,8 @@ export interface SearchResult {
 }
 
 const NO_STORE = { "Cache-Control": "no-store" };
-const RECT = `${SERVICE_AREA.west},${SERVICE_AREA.south},${SERVICE_AREA.east},${SERVICE_AREA.north}`;
 
-function inArea(lat: number, lng: number) {
-  return lat >= SERVICE_AREA.south && lat <= SERVICE_AREA.north && lng >= SERVICE_AREA.west && lng <= SERVICE_AREA.east;
-}
+const rectOf = (a: Area) => `${a.west},${a.south},${a.east},${a.north}`;
 
 interface KakaoPlace {
   place_name: string;
@@ -55,14 +52,17 @@ export async function GET(request: Request) {
     return Response.json({ error: "장소 검색이 아직 설정되지 않았어요." }, { status: 503, headers: NO_STORE });
   }
 
-  const q = (new URL(request.url).searchParams.get("q") ?? "").trim();
+  const sp = new URL(request.url).searchParams;
+  const q = (sp.get("q") ?? "").trim();
+  // 지역(전주·군산·제주) 안에서만 찾음
+  const area = (REGIONS.find((r) => r.id === sp.get("region")) ?? DEFAULT_REGION).area;
   if (q.length < 1 || q.length > 50) {
     return Response.json({ error: "검색어는 1~50자로 입력해 주세요." }, { status: 400, headers: NO_STORE });
   }
 
   try {
     // 1) 장소 이름 검색 (서비스 지역 사각형 안에서만)
-    const places = await kakao<KakaoPlace>("/v2/local/search/keyword.json", { query: q, rect: RECT, size: "10" }, key);
+    const places = await kakao<KakaoPlace>("/v2/local/search/keyword.json", { query: q, rect: rectOf(area), size: "10" }, key);
     let results: SearchResult[] = places.map((p) => ({
       name: p.place_name,
       address: p.road_address_name || p.address_name,
@@ -83,7 +83,7 @@ export async function GET(request: Request) {
       }));
     }
 
-    results = results.filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng) && inArea(r.lat, r.lng));
+    results = results.filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng) && inArea(area, r.lat, r.lng));
     return Response.json({ results }, { headers: NO_STORE });
   } catch {
     return Response.json({ error: "검색 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요." }, { status: 502, headers: NO_STORE });

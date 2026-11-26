@@ -1,4 +1,4 @@
-// 안전 점수가 매겨진 도로 그래프(public/data/graph.json)로 브라우저에서 경로를 계산합니다.
+// 안전 점수가 매겨진 도로 그래프(public/data/<지역>/graph.json)로 브라우저에서 경로를 계산합니다.
 // 알고리즘: 이진 힙을 쓴 다익스트라.
 // 비용 = 길이 × (1 + 안전가중치 × (1 − 안전점수/100))
 //   안전가중치 0  → 최단 경로
@@ -41,8 +41,8 @@ export interface Graph {
 
 const CELL = 0.002; // 약 200m
 
-export async function loadGraph(): Promise<Graph> {
-  const res = await fetch("/data/graph.json");
+export async function loadGraph(region: string): Promise<Graph> {
+  const res = await fetch(`/data/${region}/graph.json`);
   if (!res.ok) throw new Error(`도로 데이터를 불러오지 못했습니다 (${res.status})`);
   const raw: RawGraph = await res.json();
   return buildGraph(raw);

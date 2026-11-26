@@ -42,7 +42,7 @@ check(darkAhead(fake, line, 90) === null, "남은 어두운 길이 30m 미만이
 check(darkAhead(fake, line, 110) === null, "끝에 다다르면 없음");
 
 // 2) 실제 경로: 경로 위 점들은 offset이 작고 along이 늘어나야 함
-const g = buildGraph(JSON.parse(readFileSync(new URL("../public/data/graph.json", import.meta.url), "utf8")));
+const g = buildGraph(JSON.parse(readFileSync(new URL("../public/data/jeonju/graph.json", import.meta.url), "utf8")));
 const r = findRoute(g, nearestNode(g, 35.8483, 127.132).node, nearestNode(g, 35.8428, 127.1278).node, 3);
 const realLine = buildLine(r);
 check(near(realLine.total, r.length, r.length * 0.02 + 5), `실제 경로 길이 일치 (${realLine.total.toFixed(0)} vs ${r.length})`);

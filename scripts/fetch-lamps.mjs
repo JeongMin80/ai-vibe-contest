@@ -12,6 +12,8 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 
 const AREAS = {
   전주시: "4641000",
+  군산시: "4671000",
+  제주시: "6510000",
 };
 
 const AREA = process.argv[2] ?? "전주시";

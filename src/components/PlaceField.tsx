@@ -12,6 +12,8 @@ interface Props {
   onFocus: () => void;
   onSelect: (r: SearchResult) => void;
   onLocate: () => void;
+  /** 검색할 지역 (전주·군산·제주) */
+  region: string;
   /** 처음 나타날 때 바로 입력칸에 커서 */
   autoFocus?: boolean;
 }
@@ -19,7 +21,7 @@ interface Props {
 const NAME = { from: "출발지", to: "도착지" } as const;
 
 /** 출발지/도착지 입력칸: 장소 검색(카카오) + 현재 위치 + 지도에서 고르기 */
-export default function PlaceField({ field, label, active, locating, onFocus, onSelect, onLocate, autoFocus }: Props) {
+export default function PlaceField({ field, label, active, locating, onFocus, onSelect, onLocate, autoFocus, region }: Props) {
   const [text, setText] = useState("");
   const [editing, setEditing] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -36,7 +38,7 @@ export default function PlaceField({ field, label, active, locating, onFocus, on
     const t = setTimeout(async () => {
       setStatus("loading");
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&region=${region}`, { signal: ctrl.signal });
         const json = (await res.json()) as { results?: SearchResult[]; error?: string };
         if (!res.ok || !json.results) {
           setError(json.error ?? "검색하지 못했어요.");
@@ -56,7 +58,7 @@ export default function PlaceField({ field, label, active, locating, onFocus, on
       clearTimeout(t);
       ctrl.abort();
     };
-  }, [text, editing]);
+  }, [text, editing, region]);
 
   useEffect(() => {
     if (autoFocus) inputRef.current?.focus();
@@ -131,7 +133,7 @@ export default function PlaceField({ field, label, active, locating, onFocus, on
         <div className="mt-1 overflow-hidden rounded-2xl border border-line bg-panel" role="listbox" aria-label={`${NAME[field]} 검색 결과`}>
           {status === "loading" && results.length === 0 && <p className="px-3 py-2.5 text-xs text-muted">찾는 중…</p>}
           {status === "empty" && (
-            <p className="px-3 py-2.5 text-xs text-muted">서비스 지역(전북대·전주교대 주변)에서 찾지 못했어요.</p>
+            <p className="px-3 py-2.5 text-xs text-muted">이 지역의 서비스 범위(대학가 주변)에서 찾지 못했어요. 다른 지역이면 위쪽에서 지역을 바꿔 주세요.</p>
           )}
           {status === "error" && <p className="px-3 py-2.5 text-xs text-danger">{error}</p>}
           {results.map((r, i) => (

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { PLACES, SERVICE_AREA, type FacilityData, type LayerId } from "@/lib/facilities";
+import type { FacilityData, LayerId } from "@/lib/facilities";
+import { DEFAULT_REGION, type Area, type Region } from "@/lib/regions";
 import { FLAG_STREETLIGHT, scoreColor, type Graph, type Route } from "@/lib/routing";
 import { REPORT_KINDS, type Report } from "@/lib/reports";
 
@@ -16,6 +17,8 @@ export interface Point {
 interface Props {
   data: FacilityData | null;
   graph: Graph | null;
+  /** 지금 지역: 지도 중심·이동 범위·캠퍼스 이름표 */
+  region: Region;
   visible: Record<LayerId, boolean>;
   from: Point | null;
   to: Point | null;
@@ -42,6 +45,9 @@ function ago(iso: string) {
 }
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
+/** 지도를 끌어서 갈 수 있는 범위: 지역보다 조금 넓게 */
+const boundsOf = (a: Area) => L.latLngBounds([a.south - 0.03, a.west - 0.04], [a.north + 0.03, a.east + 0.04]);
+
 /** 보안등은 이 확대 수준부터 보여줌 */
 const LAMP_MIN_ZOOM = 15;
 
@@ -61,7 +67,7 @@ function pinIcon(letter: string, color: string) {
   });
 }
 
-export default function MapView({ data, graph, visible, from, to, safe, short, onPick, picking, me, follow, onUserMove, reports, mark }: Props) {
+export default function MapView({ data, graph, region, visible, from, to, safe, short, onPick, picking, me, follow, onUserMove, reports, mark }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const groupsRef = useRef<Partial<Record<LayerId, L.LayerGroup>>>({});
@@ -72,6 +78,9 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
   const onUserMoveRef = useRef(onUserMove);
   const meLayerRef = useRef<L.LayerGroup | null>(null);
   const reportLayerRef = useRef<L.LayerGroup | null>(null);
+  const regionLayerRef = useRef<L.LayerGroup | null>(null);
+  /** 지금 지도가 맞춰져 있는 지역 */
+  const shownRegionRef = useRef(DEFAULT_REGION.id);
   useEffect(() => {
     onPickRef.current = onPick;
     onUserMoveRef.current = onUserMove;
@@ -81,17 +90,15 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = L.map(containerRef.current, {
-      center: [PLACES[0].lat, PLACES[0].lng],
+      center: DEFAULT_REGION.center,
       zoom: 15,
       minZoom: 13,
       maxZoom: 19,
       preferCanvas: true,
       zoomControl: false,
-      maxBounds: L.latLngBounds(
-        [SERVICE_AREA.south - 0.03, SERVICE_AREA.west - 0.04],
-        [SERVICE_AREA.north + 0.03, SERVICE_AREA.east + 0.04]
-      ),
+      maxBounds: boundsOf(DEFAULT_REGION.area),
     });
+    shownRegionRef.current = DEFAULT_REGION.id;
     L.control.zoom({ position: "topright" }).addTo(map);
     // 키가 필요 없는 OpenStreetMap 기본 타일을 쓰고, CSS 필터(.dark-tiles)로 어둡게 바꿉니다.
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -100,26 +107,8 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 기여자',
     }).addTo(map);
 
-    // 서비스 지역 밖은 살짝 어둡게
-    const world: L.LatLngTuple[] = [
-      [-89, -179],
-      [-89, 179],
-      [89, 179],
-      [89, -179],
-    ];
-    const area: L.LatLngTuple[] = [
-      [SERVICE_AREA.south, SERVICE_AREA.west],
-      [SERVICE_AREA.south, SERVICE_AREA.east],
-      [SERVICE_AREA.north, SERVICE_AREA.east],
-      [SERVICE_AREA.north, SERVICE_AREA.west],
-    ];
-    L.polygon([world, area], { stroke: false, fillColor: "#000", fillOpacity: 0.45, interactive: false }).addTo(map);
-
-    for (const p of PLACES) {
-      L.circleMarker([p.lat, p.lng], { radius: 5, color: "#ffd166", weight: 2, fillOpacity: 1, fillColor: "#ffd166" })
-        .bindTooltip(p.name, { permanent: true, direction: "top", offset: [0, -6], className: "place-label" })
-        .addTo(map);
-    }
+    // 지역 표시(바깥 어둡게·캠퍼스 이름표)는 지역이 바뀔 때마다 다시 그림 (아래 효과)
+    regionLayerRef.current = L.layerGroup().addTo(map);
 
     // 경로와 내 위치는 안전시설 점들보다 위에 그리도록 전용 층을 만듭니다
     map.createPane("routePane").style.zIndex = "450";
@@ -141,6 +130,40 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
       groupsRef.current = {};
     };
   }, []);
+
+  // 지역이 바뀌면: 그 지역으로 이동, 이동 범위 제한, 바깥은 살짝 어둡게, 캠퍼스 이름표
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = regionLayerRef.current;
+    if (!map || !layer) return;
+    const a = region.area;
+    layer.clearLayers();
+    const world: L.LatLngTuple[] = [
+      [-89, -179],
+      [-89, 179],
+      [89, 179],
+      [89, -179],
+    ];
+    const box: L.LatLngTuple[] = [
+      [a.south, a.west],
+      [a.south, a.east],
+      [a.north, a.east],
+      [a.north, a.west],
+    ];
+    L.polygon([world, box], { stroke: false, fillColor: "#000", fillOpacity: 0.45, interactive: false }).addTo(layer);
+    for (const p of region.places) {
+      L.circleMarker([p.lat, p.lng], { radius: 5, color: "#ffd166", weight: 2, fillOpacity: 1, fillColor: "#ffd166" })
+        .bindTooltip(p.name, { permanent: true, direction: "top", offset: [0, -6], className: "place-label" })
+        .addTo(layer);
+    }
+    // 지역을 실제로 바꿨을 때만 지도를 옮김 (처음에는 지도를 만들 때 이미 그 지역에 맞춰 둠)
+    if (shownRegionRef.current === region.id) return;
+    shownRegionRef.current = region.id;
+    // 범위를 먼저 풀고 이동한 뒤 새 범위를 걸어야 다른 지역으로 넘어갈 수 있음
+    map.setMaxBounds(undefined as unknown as L.LatLngBounds);
+    map.setView(region.center, 15, { animate: false });
+    map.setMaxBounds(boundsOf(a));
+  }, [region]);
 
   // 지도 선택 중일 때 커서 모양
   useEffect(() => {
@@ -187,7 +210,13 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
 
     groupsRef.current = { ...groupsRef.current, ...groups };
     return () => {
-      for (const g of Object.values(groups)) g?.remove();
+      // 지역이 바뀌면 옛 지역 레이어를 지우고 목록에서도 빼야, 아래 켜기·끄기 효과가 다시 붙이지 않음
+      for (const [id, g] of Object.entries(groups) as [LayerId, L.LayerGroup][]) {
+        g.remove();
+        if (groupsRef.current[id] === g) delete groupsRef.current[id];
+      }
+      // 다 쓴 그림판(캔버스)도 지움 (지역을 오갈 때 쌓이지 않게)
+      renderer.remove();
     };
   }, [data]);
 
@@ -213,6 +242,8 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
     if (visible.street) group.addTo(map);
     return () => {
       group.remove();
+      if (groupsRef.current.street === group) delete groupsRef.current.street;
+      renderer.remove();
     };
     // visible 은 아래 효과에서 반영하므로 여기서는 처음 한 번만 봅니다
     // eslint-disable-next-line react-hooks/exhaustive-deps

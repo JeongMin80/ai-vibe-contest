@@ -19,7 +19,7 @@ export default function Onboarding({ onDone }: { onDone: () => void }) {
           </li>
         ))}
       </ol>
-      <p className="mt-2 text-[11px] text-muted">지금은 전북대·전주교대 주변에서 쓸 수 있어요.</p>
+      <p className="mt-2 text-[11px] text-muted">지금은 전북대·전주교대(전주), 군산대(군산), 제주대(제주) 주변에서 쓸 수 있어요. 위쪽에서 지역을 고르세요.</p>
       <button type="button" onClick={onDone} className="mt-2 w-full rounded-lg border border-accent/60 py-1.5 text-xs font-bold text-accent">
         알겠어요
       </button>

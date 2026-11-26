@@ -3,7 +3,8 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { LAYERS, SERVICE_AREA, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
+import { LAYERS, loadFacilities, type FacilityData, type LayerId } from "@/lib/facilities";
+import { DEFAULT_REGION, REGIONS, regionById, regionOf, type RegionId } from "@/lib/regions";
 import { FLAG_STREETLIGHT, distM, findRoute, loadGraph, nearestNode, sameRoute, type Graph, type Route } from "@/lib/routing";
 import { ARRIVE_M, OFF_ROUTE_M, buildLine, darkAhead, locate, segmentAt, type RouteLine } from "@/lib/navigation";
 import NavPanel, { type NavState } from "./NavPanel";
@@ -98,7 +99,11 @@ export default function MapApp() {
     locating: boolean;
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const graphPromise = useRef<Promise<Graph> | null>(null);
+  /** 지금 보는 지역 (전주·군산·제주). 지역마다 시설·도로 데이터가 따로 있습니다 */
+  const [regionId, setRegionId] = useState<RegionId>(DEFAULT_REGION.id);
+  const region = regionById(regionId);
+  const regionRef = useRef<RegionId>(DEFAULT_REGION.id);
+  const graphPromises = useRef(new Map<RegionId, Promise<Graph>>());
   // 비동기 콜백(현재 위치 등)에서도 최신 출발·도착을 보도록
   const fromRef = useRef<Point | null>(null);
   const toRef = useRef<Point | null>(null);
@@ -119,17 +124,22 @@ export default function MapApp() {
   const [focusTo, setFocusTo] = useState(false);
 
   useEffect(() => {
-    loadFacilities()
-      .then(setData)
-      .catch((e: Error) => setMessage(e.message));
-  }, []);
+    let alive = true;
+    loadFacilities(regionId)
+      .then((d) => alive && setData(d))
+      .catch((e: Error) => alive && setMessage(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [regionId]);
 
   // 최근 시민 제보 (실패해도 지도·경로는 그대로 쓸 수 있게 조용히 넘어감)
   const loadReports = useCallback(() => {
-    fetchReports(SERVICE_AREA)
-      .then(setReports)
+    const id = regionId;
+    fetchReports(regionById(id).area)
+      .then((r) => regionRef.current === id && setReports(r))
       .catch(() => {});
-  }, []);
+  }, [regionId]);
   useEffect(() => {
     loadReports();
   }, [loadReports]);
@@ -147,16 +157,41 @@ export default function MapApp() {
     );
   };
 
-  const ensureGraph = useCallback(() => {
-    if (!graphPromise.current) {
-      graphPromise.current = loadGraph();
-      graphPromise.current.then(setGraph).catch((e: Error) => {
-        graphPromise.current = null;
+  /** 그 지역의 도로 데이터 (한 번 받으면 지역별로 기억) */
+  const ensureGraph = useCallback((id: RegionId = regionRef.current) => {
+    let p = graphPromises.current.get(id);
+    if (!p) {
+      p = loadGraph(id);
+      graphPromises.current.set(id, p);
+      p.catch((e: Error) => {
+        graphPromises.current.delete(id);
         setMessage(e.message);
       });
     }
-    return graphPromise.current;
+    p.then((g) => {
+      if (regionRef.current === id) setGraph(g);
+    }).catch(() => {});
+    return p;
   }, []);
+
+  /** 다른 지역으로 옮기기: 지도·데이터를 바꾸고, 그 지역에 없는 출발·도착은 지웁니다 */
+  const switchRegion = useCallback(
+    (id: RegionId) => {
+      if (regionRef.current === id) return;
+      regionRef.current = id;
+      setRegionId(id);
+      setData(null);
+      setGraph(null);
+      setReports([]);
+      setNav(null);
+      setFrom(null);
+      setTo(null);
+      fromRef.current = null;
+      toRef.current = null;
+      void ensureGraph(id);
+    },
+    [ensureGraph]
+  );
 
   // 도로 데이터는 지도가 뜬 뒤 미리 받아 둡니다 (큰길 조명 표시 + 경로 찾기를 바로 쓰도록)
   useEffect(() => {
@@ -194,10 +229,24 @@ export default function MapApp() {
   /** 좌표를 가장 가까운 길에 붙여서 출발/도착으로 지정 */
   const setPoint = useCallback(
     async (field: Field, lat: number, lng: number, label: string) => {
-      const g = await ensureGraph();
+      const r = regionOf(lat, lng, 0.005);
+      if (!r) {
+        setMessage(`서비스 지역(${REGIONS.map((x) => x.name).join("·")} 대학가) 밖이에요. 지도에서 길 가까운 곳을 눌러 주세요.`);
+        return;
+      }
+      if (r.id !== regionRef.current) {
+        // 현재 위치가 다른 지역이면, 이미 고른 도착지(예: 집)를 지우지 않고 알려만 줍니다
+        const other = field === "from" ? toRef.current : fromRef.current;
+        if (label === "현재 위치" && other) {
+          setMessage(`지금 위치는 ${r.name}이라 ${regionById(regionRef.current).name}까지 걸어가는 길은 찾을 수 없어요. 출발지를 지도에서 골라 주세요.`);
+          return;
+        }
+        switchRegion(r.id);
+      }
+      const g = await ensureGraph(r.id);
       const near = nearestNode(g, lat, lng);
       if (!near) {
-        setMessage("서비스 지역(전북대·전주교대 주변) 밖이거나 길에서 너무 멀어요. 지도에서 길 가까운 곳을 눌러 주세요.");
+        setMessage(`${r.name} 서비스 지역 밖이거나 길에서 너무 멀어요. 지도에서 길 가까운 곳을 눌러 주세요.`);
         return;
       }
       setMessage(null);
@@ -213,7 +262,7 @@ export default function MapApp() {
       const other = field === "from" ? toRef.current : fromRef.current;
       setPicking(other ? null : field === "from" ? "to" : "from");
     },
-    [ensureGraph]
+    [ensureGraph, switchRegion]
   );
 
   // 공유받은 링크(?f=…&t=…&l=…)로 들어왔으면 그 경로를 바로 엽니다 (처음 한 번)
@@ -236,6 +285,8 @@ export default function MapApp() {
   /** 🏠 집으로 안심 귀가: 도착지 = 집, 출발지 = 현재 위치 */
   const goHome = () => {
     if (!home) return;
+    const hr = regionOf(home.lat, home.lng, 0.005);
+    if (hr) switchRegion(hr.id);
     setMode("route");
     setMessage(null);
     const h = { lat: home.lat, lng: home.lng, label: `🏠 ${home.name}` };
@@ -485,6 +536,7 @@ export default function MapApp() {
       <MapView
         data={data}
         graph={graph}
+        region={region}
         visible={visible}
         from={mode === "route" ? from : null}
         to={mode === "route" ? to : null}
@@ -505,7 +557,29 @@ export default function MapApp() {
         <div className="pointer-events-auto inline-flex items-center gap-2 rounded-2xl border border-line bg-panel/90 px-4 py-2.5 shadow-lg backdrop-blur">
           <span aria-hidden className="h-2.5 w-2.5 rounded-full bg-accent shadow-[0_0_12px_var(--accent)]" />
           <h1 className="text-base font-bold tracking-tight">환한길</h1>
-          <span className="text-xs text-muted">밤길 안심 경로</span>
+          <span className="hidden text-xs text-muted sm:inline">밤길 안심 경로</span>
+          {/* 지역 고르기 (길 안내 중에는 숨김) */}
+          {!nav && (
+            <div role="radiogroup" aria-label="지역" className="ml-1 inline-flex rounded-xl border border-line p-0.5">
+              {REGIONS.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={r.id === regionId}
+                  onClick={() => {
+                    setMessage(null);
+                    setSafe(null);
+                    switchRegion(r.id);
+                    if (mode === "route") setPicking("from");
+                  }}
+                  className={`rounded-lg px-2 py-0.5 text-xs ${r.id === regionId ? "bg-accent font-bold text-accent-ink" : "text-muted"}`}
+                >
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {mode === "route" && picking && (
           <p
@@ -672,6 +746,7 @@ export default function MapApp() {
                         // 검색 결과 좌표는 저장하지 않고, 가장 가까운 OSM 길 위의 점으로 바꿔서 씁니다
                         onSelect={(r) => void setPoint(field, r.lat, r.lng, r.name)}
                         onLocate={() => locateMe(field)}
+                        region={regionId}
                         autoFocus={field === "to" && focusTo && !to}
                       />
                     );
@@ -689,6 +764,7 @@ export default function MapApp() {
 
               <MyPlaces
                 places={places}
+                campuses={region.places}
                 target={(() => {
                   // 아직 저장되지 않은 도착지(없으면 출발지)를 저장 후보로
                   const t = to ? { field: "to" as const, ...to } : from ? { field: "from" as const, ...from } : null;

@@ -1,7 +1,8 @@
 // 도로망(OSM)과 안전시설 데이터로 "길마다 안전 점수가 매겨진 그래프"를 만듭니다.
 // 실행: node scripts/build-graph.mjs
 // 입력: data/raw/osm-walk_전주시.json, data/raw/osm-campus_전주시.json, data/safety/*.json
-// 결과: public/data/graph.json
+// 실행: node scripts/build-graph.mjs <전주시|군산시|제주시>
+// 결과: public/data/<지역>/graph.json
 //
 // 그래프 형식 (용량을 줄이려고 배열로 저장)
 //   v=3, origin=[lat0,lng0], scale=1e5 : 좌표는 (값 - origin) × scale 정수,
@@ -19,7 +20,8 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 
-const AREA = "전주시";
+import { regionFromArgs } from "./regions.mjs";
+const { area: AREA, slug: SLUG } = regionFromArgs();
 const root = new URL("../", import.meta.url);
 const readJson = (p) => JSON.parse(readFileSync(new URL(p, root), "utf8"));
 
@@ -276,7 +278,7 @@ const out = {
   nodes: nodeList.flatMap(([la, ln]) => [qLat(la), qLng(ln)]),
   edges,
 };
-mkdirSync(new URL("public/data/", root), { recursive: true });
+mkdirSync(new URL(`public/data/${SLUG}/`, root), { recursive: true });
 // v3: 노드는 바로 앞 노드와의 차이, 중간 좌표는 바로 앞 점(첫 점은 시작 노드)과의 차이로 저장 → 압축이 잘 됨
 {
   const abs = out.nodes;
@@ -302,7 +304,7 @@ mkdirSync(new URL("public/data/", root), { recursive: true });
   out.nodes = nd;
 }
 const json = JSON.stringify(out);
-writeFileSync(new URL("public/data/graph.json", root), json);
+writeFileSync(new URL(`public/data/${SLUG}/graph.json`, root), json);
 
 // 점수 분포
 const buckets = [0, 0, 0, 0, 0];
@@ -313,4 +315,4 @@ console.log(`총 길이 ${km(stats.lenSum)}km, 거리 가중 평균 점수 ${(st
 console.log(`CCTV 50m 안 구간 ${stats.withCctv}, 비상벨 100m 안 구간 ${stats.withBell}, 캠퍼스 구간 ${stats.campus}`);
 console.log(`점수 분포(길이 km): 0-19 ${km(buckets[0])} | 20-39 ${km(buckets[1])} | 40-59 ${km(buckets[2])} | 60-79 ${km(buckets[3])} | 80-100 ${km(buckets[4])}`);
 console.log(`조명: 보안등 ${lights.length}개 (30m 안 보안등 있는 구간 ${stats.lamp}) · 큰길 가로등 추정 구간 ${stats.street}`);
-console.log(`public/data/graph.json ${(json.length / 1024).toFixed(0)}KB`);
+console.log(`public/data/${SLUG}/graph.json ${(json.length / 1024).toFixed(0)}KB`);
