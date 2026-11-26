@@ -4,7 +4,9 @@
 // 결과: public/data/graph.json
 //
 // 그래프 형식 (용량을 줄이려고 배열로 저장)
-//   nodes: [lat, lng, lat, lng, ...]                  교차점 좌표 (평탄화)
+//   v=3, origin=[lat0,lng0], scale=1e5 : 좌표는 (값 - origin) × scale 정수,
+//   노드는 앞 노드와의 차이, geom 은 앞 점(첫 점은 u 노드)과의 차이로 저장
+//   nodes: [lat, lng, lat, lng, ...]                  교차점 좌표 (평탄화, 정수)
 //   edges: [[u, v, len, score, cctv, flags, hw, geom], ...]
 //     u, v   : 양 끝 교차점 번호
 //     len    : 길이(m)
@@ -212,7 +214,11 @@ function samplePoints(pts) {
   return out;
 }
 
-const r5 = (n) => Math.round(n * 1e5) / 1e5;
+// v2 형식: 좌표를 기준점(ORIGIN)에서의 차이 × 10만(약 1m 단위 정수)으로 저장해 파일 크기를 줄입니다.
+const ORIGIN = [35.79, 127.1];
+const SCALE = 1e5;
+const qLat = (n) => Math.round((n - ORIGIN[0]) * SCALE);
+const qLng = (n) => Math.round((n - ORIGIN[1]) * SCALE);
 const edges = [];
 const stats = { campus: 0, withCctv: 0, withBell: 0, scoreSum: 0, lenSum: 0, lamp: 0, street: 0 };
 for (const e of rawEdges) {
@@ -249,7 +255,7 @@ for (const e of rawEdges) {
   const flags = (campus ? 1 : 0) | (bell ? 2 : 0) | (lampCover > 0 ? 4 : 0) | (streetEstimated ? 8 : 0);
   stats.lamp += lampCover > 0 ? 1 : 0;
   stats.street += streetEstimated ? 1 : 0;
-  const geom = e.pts.slice(1, -1).flatMap(([la, ln]) => [r5(la), r5(ln)]);
+  const geom = e.pts.slice(1, -1).flatMap(([la, ln]) => [qLat(la), qLng(ln)]);
   edges.push([idxOf(e.a), idxOf(e.b), Math.round(len), score, cctvSet.size, flags, HW_TYPES.indexOf(e.hw), geom]);
 
   stats.campus += campus ? 1 : 0;
@@ -260,14 +266,41 @@ for (const e of rawEdges) {
 }
 
 const out = {
+  v: 3,
+  origin: ORIGIN,
+  scale: SCALE,
   area: AREA,
   builtAt: new Date().toISOString().slice(0, 10),
   hasLight: HAS_LIGHT,
   hwTypes: HW_TYPES,
-  nodes: nodeList.flatMap(([la, ln]) => [r5(la), r5(ln)]),
+  nodes: nodeList.flatMap(([la, ln]) => [qLat(la), qLng(ln)]),
   edges,
 };
 mkdirSync(new URL("public/data/", root), { recursive: true });
+// v3: 노드는 바로 앞 노드와의 차이, 중간 좌표는 바로 앞 점(첫 점은 시작 노드)과의 차이로 저장 → 압축이 잘 됨
+{
+  const abs = out.nodes;
+  const nd = [];
+  for (let i = 0, pl = 0, pn = 0; i < abs.length; i += 2) {
+    nd.push(abs[i] - pl, abs[i + 1] - pn);
+    pl = abs[i];
+    pn = abs[i + 1];
+  }
+  for (const e of out.edges) {
+    const g = e[7];
+    let la = abs[2 * e[0]];
+    let ln = abs[2 * e[0] + 1];
+    for (let j = 0; j < g.length; j += 2) {
+      const a = g[j];
+      const b = g[j + 1];
+      g[j] = a - la;
+      g[j + 1] = b - ln;
+      la = a;
+      ln = b;
+    }
+  }
+  out.nodes = nd;
+}
 const json = JSON.stringify(out);
 writeFileSync(new URL("public/data/graph.json", root), json);
 

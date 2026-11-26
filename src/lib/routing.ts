@@ -5,6 +5,10 @@
 //   안전가중치 커질수록 → 점수 낮은(어두운) 길을 더 피함
 
 export interface RawGraph {
+  /** 파일 형식. 3이면 정수·차이값으로 압축된 형식 (decodeGraph로 풂) */
+  v?: number;
+  origin?: [number, number];
+  scale?: number;
   area: string;
   builtAt: string;
   hasLight: boolean;
@@ -42,7 +46,41 @@ export async function loadGraph(): Promise<Graph> {
   return buildGraph(raw);
 }
 
-export function buildGraph(raw: RawGraph): Graph {
+/**
+ * v3 파일 풀기: 좌표가 "기준점과의 차이 × 10만" 정수이고,
+ * 노드는 앞 노드와의 차이, 길 중간 좌표는 앞 점(첫 점은 시작 노드)과의 차이로 들어 있습니다.
+ * (파일 크기를 줄이려고 scripts/build-graph.mjs 가 이렇게 저장합니다)
+ */
+export function decodeGraph(raw: RawGraph): RawGraph {
+  if (raw.v !== 3 || !raw.origin || !raw.scale) return raw;
+  const [lat0, lng0] = raw.origin;
+  const s = raw.scale;
+  const abs = new Array<number>(raw.nodes.length);
+  for (let i = 0, la = 0, ln = 0; i < raw.nodes.length; i += 2) {
+    la += raw.nodes[i];
+    ln += raw.nodes[i + 1];
+    abs[i] = la;
+    abs[i + 1] = ln;
+  }
+  const nodes = abs.map((q, i) => (i % 2 === 0 ? lat0 : lng0) + q / s);
+  const edges = raw.edges.map((e) => {
+    const g = e[7];
+    const out = new Array<number>(g.length);
+    let la = abs[2 * e[0]];
+    let ln = abs[2 * e[0] + 1];
+    for (let j = 0; j < g.length; j += 2) {
+      la += g[j];
+      ln += g[j + 1];
+      out[j] = lat0 + la / s;
+      out[j + 1] = lng0 + ln / s;
+    }
+    return [e[0], e[1], e[2], e[3], e[4], e[5], e[6], out] as RawGraph["edges"][number];
+  });
+  return { ...raw, v: 1, nodes, edges };
+}
+
+export function buildGraph(input: RawGraph): Graph {
+  const raw = decodeGraph(input);
   const n = raw.nodes.length / 2;
   const lat = new Float64Array(n);
   const lng = new Float64Array(n);
