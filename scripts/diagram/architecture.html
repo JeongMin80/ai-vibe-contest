@@ -1,0 +1,90 @@
+<!doctype html>
+<!-- 서비스 구조도(1600×1000) 원본. scripts/make-diagram.mjs 가 Edge로 찍어서 docs/diagrams/architecture.png 로 저장합니다. -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg: #0b1020; --panel: #131b31; --panel2: #1a2340; --line: #2a3658; --text: #eef2ff; --muted: #9aa6c7; --accent: #ffd166; --safe: #34d399; --cctv: #4ea8ff; --bell: #ff5d6c; --lamp: #f5a524; }
+  * { margin: 0; box-sizing: border-box; }
+  html, body { width: 1600px; height: 1000px; overflow: hidden; background: var(--bg); }
+  body { font-family: "Noto Sans KR", "Malgun Gothic", sans-serif; color: var(--text); padding: 48px 56px; position: relative; }
+  h1 { font-size: 40px; font-weight: 800; letter-spacing: -1px; display: flex; align-items: center; gap: 14px; }
+  h1 .dot { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 24px 6px rgba(255, 209, 102, .5); }
+  h1 small { font-size: 22px; color: var(--muted); font-weight: 500; margin-left: 8px; }
+  .row { display: grid; grid-template-columns: 1fr 44px 1.12fr 44px 1fr 44px 1.12fr; align-items: stretch; margin-top: 40px; }
+  .col { display: flex; flex-direction: column; gap: 14px; }
+  .step { font-size: 17px; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+  .title { font-size: 27px; font-weight: 800; letter-spacing: -.5px; margin-top: -6px; }
+  .card { background: var(--panel); border: 2px solid var(--line); border-radius: 18px; padding: 16px 18px; }
+  .card b { display: block; font-size: 20px; margin-bottom: 4px; }
+  .card p { font-size: 16px; color: var(--muted); line-height: 1.45; }
+  .card.hi { border-color: rgba(255, 209, 102, .6); background: linear-gradient(180deg, rgba(255, 209, 102, .08), var(--panel)); }
+  .card.green { border-color: rgba(52, 211, 153, .6); background: linear-gradient(180deg, rgba(52, 211, 153, .08), var(--panel)); }
+  i.c { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; }
+  .arrow { display: grid; place-items: center; color: var(--accent); font-size: 40px; font-weight: 800; }
+  .formula { font-size: 16px; white-space: nowrap; color: var(--text); background: var(--panel2); border-radius: 10px; padding: 10px 12px; line-height: 1.6; margin-top: 8px; }
+  .formula em { font-style: normal; color: var(--accent); }
+  .bottom { position: absolute; left: 56px; right: 56px; bottom: 44px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+  .note { border-top: 3px solid var(--line); padding-top: 14px; }
+  .note b { font-size: 20px; }
+  .note p { font-size: 16px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+  .note.y { border-color: var(--accent); }
+  .note.g { border-color: var(--safe); }
+  .note.b { border-color: var(--cctv); }
+  .loop { position: absolute; right: 56px; top: 52px; font-size: 18px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <h1><span class="dot"></span>환한길 서비스 구조 <small>공공데이터 → 길마다 안전 점수 → 내 휴대폰에서 경로 계산</small></h1>
+  <div class="loop">https://hwanhangil.vercel.app</div>
+
+  <div class="row">
+    <div class="col">
+      <div class="step">① 데이터 모으기</div>
+      <div class="title">공공데이터 · 지도</div>
+      <div class="card"><b><i class="c" style="background:var(--cctv)"></i>CCTV</b><p>행정안전부 CCTV 정보 (전주 1,489 · 군산 772 · 제주 195)</p></div>
+      <div class="card"><b><i class="c" style="background:var(--lamp)"></i>보안등</b><p>전국 보안등 표준데이터 (전주 12,588)</p></div>
+      <div class="card"><b><i class="c" style="background:var(--bell)"></i>안전비상벨</b><p>행정안전부 안전비상벨 위치</p></div>
+      <div class="card"><b><i class="c" style="background:#cbd5e1"></i>도로망</b><p>OpenStreetMap 보행 도로 · 큰길(가로등 추정) · 산길·공원길</p></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="col">
+      <div class="step">② 데이터 준비 (Node.js 스크립트)</div>
+      <div class="title">길마다 안전 점수 0~100</div>
+      <div class="card hi"><b>구간마다 주변 안전시설 세기</b>
+        <p>구간에서 50m 안 CCTV · 30m 안 보안등·큰길 조명 · 100m 안 비상벨</p>
+        <div class="formula">점수 = <em>40%</em> CCTV + <em>35%</em> 조명<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ <em>20%</em> 도로 종류 + <em>5%</em> 비상벨</div>
+      </div>
+      <div class="card"><b>지역별 파일로 압축</b><p>graph.json(전주 2만 5천 구간, 정수·차이값 압축 → 전송 약 300KB) + facilities.json</p></div>
+      <div class="card"><b>낙인 없는 기준</b><p>범죄 통계 대신 "안전시설이 있는 곳"으로만 점수</p></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="col">
+      <div class="step">③ 배포 (Vercel)</div>
+      <div class="title">웹 주소 하나로</div>
+      <div class="card"><b>정적 파일</b><p>화면 + 지역 데이터. GitHub에 올리면 자동 배포</p></div>
+      <div class="card"><b>서버 API 2개</b><p>장소 검색 · 주변 편의점/지구대 (카카오 로컬)<br>키는 서버에만, 결과는 저장 안 함(no-store)</p></div>
+      <div class="card"><b>Supabase (서울)</b><p>시민 제보 저장: 가로등 고장 · 매우 어두움 · 공사 중 (14일)</p></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="col">
+      <div class="step">④ 사용자 휴대폰</div>
+      <div class="title">계산은 내 휴대폰 안에서</div>
+      <div class="card green"><b>안심 경로 계산</b>
+        <div class="formula">비용 = 거리 × (1 + <em>가중치</em> × 위험도)<br>가중치: 조금 <em>1.5</em> · 보통 <em>3</em> · 최대 <em>12</em><br>밤: 조명 없는 산길 <em>×3</em> · 시민 제보 반영</div>
+      </div>
+      <div class="card"><b>길 안내</b><p>남은 거리 · 어두운 길 예고 · 이탈/도착을 음성·진동으로 · 가족에게 출발·도착 알림</p></div>
+      <div class="card"><b>앱처럼 (PWA)</b><p>홈 화면 추가, 받은 지역은 인터넷 없이도 사용</p></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="note y"><b>왜 휴대폰에서 계산하나요?</b><p>사용자가 늘어도 서버 부담이 없고, 경로의 출발·도착 위치를 서버로 보내지 않습니다. (주변 찾기만 현재 위치로 검색하고 저장하지 않음)</p></div>
+    <div class="note g"><b>점검</b><p>기능 점검 8종(npm test) + 실제 사이트를 휴대폰 크기로 자동 조작하는 16단계 점검(npm run check:live)</p></div>
+    <div class="note b"><b>지역 넓히기</b><p>지역 좌표만 정하면 같은 스크립트로 데이터를 다시 만듭니다 (전주 → 군산 · 제주 추가)</p></div>
+  </div>
+</body>
+</html>
