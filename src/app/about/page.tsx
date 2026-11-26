@@ -101,7 +101,42 @@ export default function AboutPage() {
           작은 길을 찾습니다.
         </li>
         <li>데이터는 기관이 갱신한 시점 기준이라 실제 현장과 다를 수 있습니다.</li>
+        <li>
+          <b className="text-text">위치 정보</b>: 안심 경로는 내 휴대폰 안에서 계산해 출발·도착 위치를 서버로 보내지 않습니다.
+          &lsquo;주변 안전한 곳&rsquo;과 장소 검색만 서버를 거쳐 카카오에 물어보고, 결과는 저장하지 않습니다. 시민 제보를 보낼 때만
+          그 위치가 저장되어 14일 동안 지도에 보입니다. 가족 알림은 내 휴대폰의 공유창으로 직접 보냅니다.
+        </li>
       </ul>
+
+      <h2 className="mt-8 text-lg font-bold">이렇게 만들었어요</h2>
+      <p className="mt-3 text-sm leading-relaxed text-muted">
+        AI 코딩 도구(Claude Code)와 함께 &lsquo;바이브 코딩&rsquo;으로 만들었습니다. 사람이 방향과 규칙을 정하고, AI가 구현한 뒤
+        <b className="text-text"> 자동 점검 → 실제 화면 확인 → 배포 → 기록</b>을 한 바퀴로 20번 넘게 반복했습니다.
+      </p>
+      <ul className="mt-3 space-y-2 text-sm leading-relaxed text-muted">
+        <li className="rounded-xl border border-line bg-panel px-3 py-2.5">
+          <b className="text-text">데이터 먼저 확인</b> — 아이디어보다 공공데이터를 실제로 받아 보고 주제를 정했습니다(대학가 월세 진단은
+          데이터가 부족해 접음).
+        </li>
+        <li className="rounded-xl border border-line bg-panel px-3 py-2.5">
+          <b className="text-text">직접 써 보고 고치기</b> — &ldquo;차도 쪽은 가로등이 있어 밝다&rdquo;는 생활 경험을 반영해 큰길 조명 추정을
+          더했습니다.
+        </li>
+        <li className="rounded-xl border border-line bg-panel px-3 py-2.5">
+          <b className="text-text">검증 전에는 배포하지 않기</b> — 기능 점검 8종을 통과해야 배포하고, 배포 뒤에는 실제 사이트를 휴대폰 크기로
+          자동 조작하는 17단계 점검으로 다시 확인합니다.
+        </li>
+      </ul>
+      <p className="mt-3 text-sm">
+        <a
+          href="https://github.com/JeongMin80/ai-vibe-contest/blob/main/개발기록.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block py-1 text-accent underline underline-offset-2"
+        >
+          개발 과정 기록 보기 (GitHub) ↗
+        </a>
+      </p>
 
       <p className="mt-10 text-xs text-muted">
         2026학년도 AI 활용 역량강화 프로그램 · AI 바이브 코딩 챌린지 출품작
