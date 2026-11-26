@@ -20,6 +20,7 @@ import {
 import MyPlaces from "./MyPlaces";
 import PlaceField from "./PlaceField";
 import RouteResult from "./RouteResult";
+import Onboarding from "./Onboarding";
 import SafeNearby from "./SafeNearby";
 
 // Leaflet은 브라우저에서만 동작하므로 서버 렌더링을 끕니다.
@@ -29,6 +30,34 @@ const MapView = dynamic(() => import("./MapView"), {
 });
 
 type Field = "from" | "to";
+
+// 처음 안내를 봤는지 (이 기기에 저장). 저장소를 못 쓰면 다시 보지 않도록 메모리에도 기억합니다.
+const ONBOARD_KEY = "hwanhangil.onboarded.v1";
+let onboardDismissed = false;
+const onboardListeners = new Set<() => void>();
+function subscribeOnboard(cb: () => void) {
+  onboardListeners.add(cb);
+  return () => {
+    onboardListeners.delete(cb);
+  };
+}
+function getOnboarded() {
+  if (onboardDismissed) return true;
+  try {
+    return window.localStorage.getItem(ONBOARD_KEY) === "1";
+  } catch {
+    return true;
+  }
+}
+// 서버 렌더링 때는 숨겨 두고, 브라우저에서 처음 온 사람에게만 보여줍니다
+const getOnboardedServer = () => true;
+function finishOnboarding() {
+  onboardDismissed = true;
+  try {
+    window.localStorage.setItem(ONBOARD_KEY, "1");
+  } catch {}
+  onboardListeners.forEach((l) => l());
+}
 export type Level = "low" | "mid" | "high";
 // 실험 근거: scripts/tune-weights.mjs (개발기록.md 참고)
 export const LEVEL_WEIGHT: Record<Level, number> = { low: 1.5, mid: 3, high: 12 };
@@ -59,6 +88,9 @@ export default function MapApp() {
   // 내 장소: 이 기기의 저장소에서 읽음 (서버 렌더링 때는 빈 목록)
   const places = useSyncExternalStore(subscribePlaces, getPlacesSnapshot, getPlacesServerSnapshot);
   const home = places.find((p) => p.home) ?? null;
+  const onboarded = useSyncExternalStore(subscribeOnboard, getOnboarded, getOnboardedServer);
+  /** "어디로 가세요?"로 들어오면 도착지 검색칸에 바로 커서 */
+  const [focusTo, setFocusTo] = useState(false);
 
   useEffect(() => {
     loadFacilities()
@@ -90,7 +122,18 @@ export default function MapApp() {
     void ensureGraph();
   };
 
+  /** 🔍 어디로 가세요?: 도착지 검색부터, 출발지는 현재 위치로 자동 */
+  const startWhereTo = () => {
+    setMode("route");
+    setMessage(null);
+    setPicking("to");
+    setFocusTo(true);
+    void ensureGraph();
+    if (!fromRef.current) locateMe("from");
+  };
+
   const closeRouteMode = () => {
+    setFocusTo(false);
     setNav(null);
     setMode("browse");
     setPicking(null);
@@ -392,13 +435,58 @@ export default function MapApp() {
             />
           ) : mode === "browse" ? (
             <>
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <p className="text-sm font-bold">지도에 표시할 안전시설</p>
-                <Link href="/about" className="text-xs text-muted underline underline-offset-2">
+              {!onboarded && <Onboarding onDone={finishOnboarding} />}
+
+              {/* 가장 먼저 할 일: 어디로 갈지 */}
+              <button
+                type="button"
+                onClick={startWhereTo}
+                className="flex w-full items-center gap-3 rounded-2xl bg-accent px-4 py-3.5 text-left text-accent-ink shadow-[0_0_24px_rgba(255,209,102,0.25)] active:scale-[0.99]"
+              >
+                <span aria-hidden className="text-lg">
+                  🔍
+                </span>
+                <span className="flex-1">
+                  <span className="block text-base font-bold">어디로 가세요?</span>
+                  <span className="block text-xs opacity-75">지금 위치에서 밝고 안전한 길을 찾아 드려요</span>
+                </span>
+              </button>
+
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {home ? (
+                  <button
+                    type="button"
+                    onClick={goHome}
+                    className="rounded-2xl border border-accent py-2.5 text-sm font-bold text-accent active:scale-[0.99]"
+                  >
+                    🏠 {home.name}까지
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={startRouteMode}
+                    className="rounded-2xl border border-line py-2.5 text-sm font-bold active:scale-[0.99]"
+                  >
+                    출발·도착 직접 고르기
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={openSafe}
+                  className="rounded-2xl border border-danger/60 py-2.5 text-sm font-bold text-danger active:scale-[0.99]"
+                >
+                  🆘 주변 · 112
+                </button>
+              </div>
+
+              {/* 지도 표시: 작게 */}
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <p className="text-[11px] text-muted">지도에 표시</p>
+                <Link href="/about" className="text-[11px] text-muted underline underline-offset-2">
                   데이터 안내
                 </Link>
               </div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="mt-1 flex flex-wrap gap-1.5">
                 {LAYERS.map((l) => {
                   const on = visible[l.id];
                   const empty = (l.id === "street" ? graph !== null : data !== null) && counts[l.id] === 0;
@@ -409,46 +497,19 @@ export default function MapApp() {
                       type="button"
                       aria-pressed={on}
                       onClick={() => setVisible((v) => ({ ...v, [l.id]: !v[l.id] }))}
-                      className={`flex flex-col items-center gap-1 rounded-2xl border px-1 py-2.5 text-xs transition ${
-                        on ? "border-line bg-panel-2" : "border-transparent bg-transparent opacity-50"
+                      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] transition ${
+                        on ? "border-line bg-panel-2" : "border-transparent opacity-45"
                       }`}
                     >
-                      <span className="h-3 w-3 rounded-full" style={{ background: l.color }} aria-hidden />
-                      <span className="font-medium">{l.short}</span>
-                      <span className="text-[11px] text-muted">
-                        {loading ? "…" : empty ? "준비 중" : l.id === "street" ? `${counts[l.id].toLocaleString()}구간` : counts[l.id].toLocaleString()}
+                      <span className="h-2 w-2 rounded-full" style={{ background: l.color }} aria-hidden />
+                      {l.short}
+                      <span className="text-muted">
+                        {loading ? "…" : empty ? "준비 중" : counts[l.id].toLocaleString()}
                       </span>
                     </button>
                   );
                 })}
               </div>
-              {home && (
-                <button
-                  type="button"
-                  onClick={goHome}
-                  className="mt-3 w-full rounded-2xl bg-accent py-3.5 text-base font-bold text-accent-ink shadow-[0_0_24px_rgba(255,209,102,0.25)] active:scale-[0.99]"
-                >
-                  🏠 {home.name}까지 안심 귀가
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={startRouteMode}
-                className={
-                  home
-                    ? "mt-2 w-full rounded-2xl border border-accent py-3 text-sm font-bold text-accent active:scale-[0.99]"
-                    : "mt-3 w-full rounded-2xl bg-accent py-3.5 text-base font-bold text-accent-ink shadow-[0_0_24px_rgba(255,209,102,0.25)] active:scale-[0.99]"
-                }
-              >
-                {home ? "다른 곳으로 경로 찾기" : "안심 경로 찾기"}
-              </button>
-              <button
-                type="button"
-                onClick={openSafe}
-                className="mt-2 w-full rounded-2xl border border-danger/60 py-2.5 text-sm font-bold text-danger active:scale-[0.99]"
-              >
-                🆘 가까운 안전한 곳 · 112
-              </button>
             </>
           ) : nav && shownSafe && line ? (
             <NavPanel
@@ -486,6 +547,7 @@ export default function MapApp() {
                         // 검색 결과 좌표는 저장하지 않고, 가장 가까운 OSM 길 위의 점으로 바꿔서 씁니다
                         onSelect={(r) => void setPoint(field, r.lat, r.lng, r.name)}
                         onLocate={() => locateMe(field)}
+                        autoFocus={field === "to" && focusTo && !to}
                       />
                     );
                   })}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { PLACES, SERVICE_AREA, type FacilityData, type LayerId } from "@/lib/facilities";
@@ -31,6 +31,9 @@ interface Props {
   onUserMove?: () => void;
 }
 
+/** 보안등은 이 확대 수준부터 보여줌 */
+const LAMP_MIN_ZOOM = 15;
+
 const COLORS: Record<LayerId, string> = {
   cctv: "#4ea8ff",
   lamp: "#ffb020",
@@ -53,6 +56,7 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
   const groupsRef = useRef<Partial<Record<LayerId, L.LayerGroup>>>({});
   const routeLayerRef = useRef<L.LayerGroup | null>(null);
   const pinLayerRef = useRef<L.LayerGroup | null>(null);
+  const [zoom, setZoom] = useState(15);
   const onPickRef = useRef(onPick);
   const onUserMoveRef = useRef(onUserMove);
   const meLayerRef = useRef<L.LayerGroup | null>(null);
@@ -105,11 +109,15 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
         .addTo(map);
     }
 
+    // 경로와 내 위치는 안전시설 점들보다 위에 그리도록 전용 층을 만듭니다
+    map.createPane("routePane").style.zIndex = "450";
+    map.createPane("mePane").style.zIndex = "460";
     routeLayerRef.current = L.layerGroup().addTo(map);
     pinLayerRef.current = L.layerGroup().addTo(map);
     map.on("click", (e: L.LeafletMouseEvent) => onPickRef.current?.(e.latlng.lat, e.latlng.lng));
     // 사용자가 직접 끌면 "따라가기"를 멈춤 (코드로 움직인 것은 dragstart가 생기지 않음)
     map.on("dragstart", () => onUserMoveRef.current?.());
+    map.on("zoomend", () => setZoom(map.getZoom()));
     meLayerRef.current = L.layerGroup().addTo(map);
 
     mapRef.current = map;
@@ -196,15 +204,16 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graph]);
 
-  // 켜기·끄기 반영
+  // 켜기·끄기 반영 (보안등은 1만 개가 넘어서 멀리서 보면 화면을 뒤덮으므로 가까이 볼 때만)
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     for (const [id, group] of Object.entries(groupsRef.current) as [LayerId, L.LayerGroup][]) {
-      if (visible[id] && !map.hasLayer(group)) group.addTo(map);
-      if (!visible[id] && map.hasLayer(group)) group.remove();
+      const show = visible[id] && (id !== "lamp" || zoom >= LAMP_MIN_ZOOM);
+      if (show && !map.hasLayer(group)) group.addTo(map);
+      if (!show && map.hasLayer(group)) group.remove();
     }
-  }, [visible, data, graph]);
+  }, [visible, data, graph, zoom]);
 
   // 길 안내: 내 위치 표시와 따라가기
   useEffect(() => {
@@ -214,6 +223,7 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
     layer.clearLayers();
     if (!me) return;
     L.circle([me.lat, me.lng], {
+      pane: "mePane",
       radius: Math.min(me.acc, 100),
       color: "#4ea8ff",
       weight: 1,
@@ -221,6 +231,7 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
       interactive: false,
     }).addTo(layer);
     L.circleMarker([me.lat, me.lng], {
+      pane: "mePane",
       radius: 8,
       color: "#fff",
       weight: 3,
@@ -258,14 +269,14 @@ export default function MapView({ data, graph, visible, from, to, safe, short, o
     if (short) {
       L.polyline(
         short.segments.flatMap((s) => s.path),
-        { color: "#cbd5e1", weight: 4, opacity: 0.7, dashArray: "2 9", lineCap: "round", interactive: false }
+        { pane: "routePane", color: "#cbd5e1", weight: 4, opacity: 0.7, dashArray: "2 9", lineCap: "round", interactive: false }
       ).addTo(layer);
     }
     // 안심 경로: 바깥 테두리 + 구간별 색
     const all = safe.segments.flatMap((s) => s.path);
-    L.polyline(all, { color: "#0b1020", weight: 10, opacity: 0.9, interactive: false }).addTo(layer);
+    L.polyline(all, { pane: "routePane", color: "#0b1020", weight: 10, opacity: 0.9, interactive: false }).addTo(layer);
     for (const s of safe.segments) {
-      L.polyline(s.path, { color: scoreColor(s.score, s.flags), weight: 6, opacity: 1, lineCap: "round", interactive: false }).addTo(layer);
+      L.polyline(s.path, { pane: "routePane", color: scoreColor(s.score, s.flags), weight: 6, opacity: 1, lineCap: "round", interactive: false }).addTo(layer);
     }
     const bounds = L.latLngBounds(all);
     if (short) bounds.extend(L.latLngBounds(short.segments.flatMap((s) => s.path)));

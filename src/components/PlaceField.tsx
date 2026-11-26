@@ -12,12 +12,14 @@ interface Props {
   onFocus: () => void;
   onSelect: (r: SearchResult) => void;
   onLocate: () => void;
+  /** 처음 나타날 때 바로 입력칸에 커서 */
+  autoFocus?: boolean;
 }
 
 const NAME = { from: "출발지", to: "도착지" } as const;
 
 /** 출발지/도착지 입력칸: 장소 검색(카카오) + 현재 위치 + 지도에서 고르기 */
-export default function PlaceField({ field, label, active, locating, onFocus, onSelect, onLocate }: Props) {
+export default function PlaceField({ field, label, active, locating, onFocus, onSelect, onLocate, autoFocus }: Props) {
   const [text, setText] = useState("");
   const [editing, setEditing] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -55,6 +57,10 @@ export default function PlaceField({ field, label, active, locating, onFocus, on
       ctrl.abort();
     };
   }, [text, editing]);
+
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
 
   const choose = (r: SearchResult) => {
     onSelect(r);
