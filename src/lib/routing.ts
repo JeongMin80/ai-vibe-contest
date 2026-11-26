@@ -404,3 +404,28 @@ export function routeGain(safe: Route, short: Route): string {
   if (moreScore >= 1) return `안전 점수가 ${moreScore}점 높아요`;
   return "더 밝은 길로 가요";
 }
+
+/** 안심 경로가 피한 어두운 길: 최단 경로에만 있는(안심 경로는 지나지 않는) 어두운 구간 중 가장 긴 연속 구간.
+ *  지도에 "어두운 길 120m 피함"처럼 보여 주는 데 씁니다. minLen보다 짧으면 null */
+export function avoidedDark(safe: Route, short: Route, minLen = 40): { path: [number, number][]; length: number } | null {
+  const used = new Set(safe.segments.map((s) => s.edge));
+  let best: { path: [number, number][]; length: number } | null = null;
+  let run: { path: [number, number][]; length: number } | null = null;
+  const close = () => {
+    if (run && (!best || run.length > best.length)) best = run;
+    run = null;
+  };
+  for (const s of short.segments) {
+    const dark = s.score < DARK_SCORE && !(s.flags & FLAG_CAMPUS) && !used.has(s.edge);
+    if (!dark) {
+      close();
+      continue;
+    }
+    if (!run) run = { path: [...s.path], length: 0 };
+    else run.path.push(...s.path.slice(1));
+    run.length += s.len;
+  }
+  close();
+  const b = best as { path: [number, number][]; length: number } | null;
+  return b && b.length >= minLen ? { path: b.path, length: Math.round(b.length) } : null;
+}

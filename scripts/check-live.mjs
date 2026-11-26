@@ -144,7 +144,9 @@ try {
   await step("군산 지역 안심 경로", async () => {
     await go(GUNSAN);
     await waitFor(SUMMARY, 25000, "경로 요약 문장");
-    return `"${(await run(`return ${SUMMARY};`)).trim()}"`;
+    const label = await run(`return [...document.querySelectorAll('.leaflet-tooltip-pane div')].map(d => d.textContent).find(t => t.includes('피함')) ?? '';`);
+    if (!label) throw new Error("지도에 피한 어두운 길 표시가 없음");
+    return `"${(await run(`return ${SUMMARY};`)).trim()}" · 지도 표시 "${label}"`;
   });
 
   await step("제주 지역 안심 경로", async () => {

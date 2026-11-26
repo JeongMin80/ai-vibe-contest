@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { routeGain, scoreLabel, type Route } from "@/lib/routing";
+import { avoidedDark, routeGain, scoreLabel, type Route } from "@/lib/routing";
 
 interface Props {
   safe: Route;
@@ -72,6 +72,7 @@ export default function RouteResult({ safe, short, same, onStart, onShare }: Pro
   };
   const extraMin = safe.minutes - short.minutes;
   const darkest = safe.darkStretches[0];
+  const avoided = same ? null : avoidedDark(safe, short);
 
   return (
     <div className="mt-3" aria-live="polite">
@@ -128,6 +129,16 @@ export default function RouteResult({ safe, short, same, onStart, onShare }: Pro
         <span className="flex items-center gap-1">
           <i className="h-1.5 w-4 rounded-full bg-[#8b9cc9]" /> 캠퍼스(데이터 없음)
         </span>
+        {!same && (
+          <span className="flex items-center gap-1">
+            <i className="h-0.5 w-4 border-t-2 border-dotted border-[#cbd5e1]" /> 최단 경로
+          </span>
+        )}
+        {avoided && (
+          <span className="flex items-center gap-1">
+            <i className="h-0.5 w-4 border-t-2 border-dashed border-danger" /> 피한 어두운 길
+          </span>
+        )}
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">

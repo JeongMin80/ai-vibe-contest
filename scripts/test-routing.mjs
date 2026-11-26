@@ -1,7 +1,7 @@
 // 경로 계산 점검: 실제 그래프로 여러 출발·도착 쌍을 계산해 최단 경로와 안심 경로를 비교합니다.
 // 실행: node --experimental-strip-types scripts/test-routing.mjs
 import { readFileSync } from "node:fs";
-import { buildGraph, findRoute, nearestNode, sameRoute, edgeCost, routeGain } from "../src/lib/routing.ts";
+import { buildGraph, findRoute, nearestNode, sameRoute, edgeCost, routeGain, avoidedDark } from "../src/lib/routing.ts";
 
 const raw = JSON.parse(readFileSync(new URL("../public/data/jeonju/graph.json", import.meta.url), "utf8"));
 const t0 = performance.now();
@@ -57,12 +57,21 @@ for (const [name, A, B] of PAIRS) {
     if (Math.abs(p[0] - q[0]) > 1e-6 || Math.abs(p[1] - q[1]) > 1e-6) continuous = false;
   }
   check(continuous, `${name}: 구간이 끊김 없이 이어져야 함`);
+  // 피한 어두운 길: 안심 경로에 없는 구간이고, 최단 경로의 어두운 길이를 넘지 않음
+  const av = avoidedDark(safe, short);
+  if (av) {
+    check(av.length <= short.darkLength + 1, `${name}: 피한 어두운 길은 최단 경로의 어두운 길보다 길 수 없음`);
+    check(av.path.length >= 2, `${name}: 피한 어두운 길은 선으로 그릴 수 있어야 함`);
+  }
+  check(avoidedDark(safe, safe) === null, `${name}: 같은 경로끼리는 피한 길이 없음`);
   const pct = (x) => `${Math.round(x * 100)}%`;
   console.log(
     `${name} (${ms.toFixed(0)}ms)\n` +
       `   최단: ${short.length}m ${short.minutes}분 · 점수 ${short.score} · CCTV구간 ${pct(short.cctvShare)} · 어두운 ${short.darkLength}m\n` +
       `   안심: ${safe.length}m ${safe.minutes}분 · 점수 ${safe.score} · CCTV구간 ${pct(safe.cctvShare)} · 어두운 ${safe.darkLength}m` +
-      (sameRoute(short, safe) ? "  (같은 경로)" : `  (+${safe.length - short.length}m)`)
+      (sameRoute(short, safe) ? "  (같은 경로)" : `  (+${safe.length - short.length}m)`) +
+      (av ? `
+   피한 어두운 길: ${av.length}m` : "")
   );
 }
 

@@ -5,7 +5,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { FacilityData, LayerId } from "@/lib/facilities";
 import { DEFAULT_REGION, type Area, type Region } from "@/lib/regions";
-import { FLAG_STREETLIGHT, scoreColor, type Graph, type Route } from "@/lib/routing";
+import { FLAG_STREETLIGHT, avoidedDark, distM, scoreColor, type Graph, type Route } from "@/lib/routing";
 import { REPORT_KINDS, type Report } from "@/lib/reports";
 
 export interface Point {
@@ -59,6 +59,19 @@ const COLORS: Record<LayerId, string> = {
   street: "#ffe27a",
   bell: "#ff5d6c",
 };
+
+// 지도를 없앨 때(개발 모드에서 화면을 두 번 붙였다 떼는 경우 등) 캔버스가 먼저 지워지고
+// 예약돼 있던 다시 그리기가 나중에 실행되면 Leaflet이 오류를 냅니다 → 캔버스가 없으면 건너뜀
+{
+  const proto = L.Canvas.prototype as unknown as { _redraw: () => void; _ctx?: CanvasRenderingContext2D; __safeRedraw?: boolean };
+  if (!proto.__safeRedraw) {
+    const redraw = proto._redraw;
+    proto._redraw = function (this: { _ctx?: CanvasRenderingContext2D }) {
+      if (this._ctx) redraw.call(this);
+    };
+    proto.__safeRedraw = true;
+  }
+}
 
 function pinIcon(letter: string, color: string) {
   return L.divIcon({
@@ -350,6 +363,35 @@ export default function MapView({ data, graph, region, visible, from, to, safe, 
         short.segments.flatMap((s) => s.path),
         { pane: "routePane", color: "#cbd5e1", weight: 4, opacity: 0.7, dashArray: "2 9", lineCap: "round", interactive: false }
       ).addTo(layer);
+      // 안심 경로가 피한 어두운 길: 최단 경로 위에 빨간 점선 + "어두운 길 Nm 피함" 표시
+      const av = avoidedDark(safe, short);
+      if (av) {
+        L.polyline(av.path, { pane: "routePane", color: "#f87171", weight: 5, opacity: 0.95, dashArray: "6 7", lineCap: "round", interactive: false }).addTo(layer);
+        // 피한 구간의 가운데(길이 기준)에 이름표
+        let acc = 0;
+        let mid = av.path[0];
+        const half = av.length / 2;
+        for (let i = 1; i < av.path.length; i++) {
+          const [a, b] = [av.path[i - 1], av.path[i]];
+          const d = distM(a[0], a[1], b[0], b[1]);
+          if (acc + d >= half) {
+            const t = d ? (half - acc) / d : 0;
+            mid = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+            break;
+          }
+          acc += d;
+        }
+        L.marker(mid, {
+          pane: "tooltipPane",
+          interactive: false,
+          keyboard: false,
+          icon: L.divIcon({
+            className: "",
+            html: `<div style="width:max-content;transform:translate(-50%,40%);white-space:nowrap;padding:2px 7px;border-radius:9px;background:#0b1020e6;border:1px solid #f87171;color:#fecaca;font:600 11px system-ui;box-shadow:0 2px 6px #0008">어두운 길 ${av.length}m 피함</div>`,
+            iconSize: [0, 0],
+          }),
+        }).addTo(layer);
+      }
     }
     // 안심 경로: 바깥 테두리 + 구간별 색
     const all = safe.segments.flatMap((s) => s.path);
