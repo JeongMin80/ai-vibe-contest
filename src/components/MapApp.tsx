@@ -555,7 +555,7 @@ export default function MapApp() {
                     switchRegion(r.id);
                     if (mode === "route") setPicking("from");
                   }}
-                  className={`rounded-lg px-2 py-1 text-xs ${r.id === regionId ? "bg-accent font-bold text-accent-ink" : "text-muted"}`}
+                  className={`min-h-7 rounded-lg px-2.5 py-1 text-xs ${r.id === regionId ? "bg-accent font-bold text-accent-ink" : "text-muted"}`}
                 >
                   {r.name}
                 </button>
