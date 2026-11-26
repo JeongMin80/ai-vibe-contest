@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import { scoreLabel, type Route } from "@/lib/routing";
 
 interface Props {
@@ -6,6 +9,8 @@ interface Props {
   same: boolean;
   /** 안심 경로로 길 안내 시작 */
   onStart?: () => void;
+  /** 경로 공유: 공유창을 열었으면 "shared", 링크를 복사했으면 "copied" */
+  onShare?: () => Promise<"shared" | "copied" | "failed">;
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -55,7 +60,15 @@ function Card({ title, route, highlight }: { title: string; route: Route; highli
   );
 }
 
-export default function RouteResult({ safe, short, same, onStart }: Props) {
+export default function RouteResult({ safe, short, same, onStart, onShare }: Props) {
+  const [shareState, setShareState] = useState<"idle" | "copied" | "failed">("idle");
+  const share = async () => {
+    if (!onShare) return;
+    const r = await onShare();
+    if (r === "shared") return;
+    setShareState(r);
+    setTimeout(() => setShareState("idle"), 2500);
+  };
   const extraMin = safe.minutes - short.minutes;
   const lessDark = short.darkLength - safe.darkLength;
   const darkest = safe.darkStretches[0];
@@ -80,6 +93,15 @@ export default function RouteResult({ safe, short, same, onStart }: Props) {
           className="mb-2 w-full rounded-2xl bg-safe py-3 text-sm font-bold text-bg shadow-[0_0_20px_rgba(52,211,153,0.25)] active:scale-[0.99]"
         >
           ▶ 안심 경로로 길 안내 시작
+        </button>
+      )}
+      {onShare && (
+        <button
+          type="button"
+          onClick={() => void share()}
+          className="mb-2 w-full rounded-2xl border border-line py-2.5 text-sm font-bold active:scale-[0.99]"
+        >
+          {shareState === "copied" ? "✓ 링크를 복사했어요" : shareState === "failed" ? "공유하지 못했어요" : "🔗 이 경로를 친구·가족에게 공유"}
         </button>
       )}
 

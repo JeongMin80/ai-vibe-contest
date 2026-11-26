@@ -20,6 +20,7 @@ import {
 import MyPlaces from "./MyPlaces";
 import PlaceField from "./PlaceField";
 import RouteResult from "./RouteResult";
+import { encodeShare, parseShare } from "@/lib/share";
 import Onboarding from "./Onboarding";
 import SafeNearby from "./SafeNearby";
 
@@ -166,6 +167,23 @@ export default function MapApp() {
     },
     [ensureGraph]
   );
+
+  // 공유받은 링크(?f=…&t=…&l=…)로 들어왔으면 그 경로를 바로 엽니다 (처음 한 번)
+  useEffect(() => {
+    const shared = parseShare(window.location.search);
+    if (!shared.to) return;
+    const dest = shared.to;
+    const t = setTimeout(async () => {
+      setMode("route");
+      setMessage(null);
+      if (shared.level) setLevel(shared.level);
+      if (shared.from) await setPoint("from", shared.from.lat, shared.from.lng, shared.from.label);
+      await setPoint("to", dest.lat, dest.lng, dest.label);
+      // 주소창은 깔끔하게 (새로고침해도 다시 열리지 않게)
+      window.history.replaceState(null, "", window.location.pathname);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [setPoint]);
 
   /** 🏠 집으로 안심 귀가: 도착지 = 집, 출발지 = 현재 위치 */
   const goHome = () => {
@@ -362,6 +380,29 @@ export default function MapApp() {
     setMessage(null);
     if (origin) await setPoint("from", origin.lat, origin.lng, "현재 위치");
     await setPoint("to", lat, lng, name);
+  };
+
+  /** 경로 공유: 휴대폰이면 공유창(카카오톡 등), 아니면 링크 복사 */
+  const shareRoute = async (): Promise<"shared" | "copied" | "failed"> => {
+    if (!from || !to) return "failed";
+    const url = `${window.location.origin}/?${encodeShare({ from, to, level })}`;
+    const mins = routes?.safe?.minutes;
+    const text = `환한길 안심 경로: ${from.label} → ${to.label}${mins ? ` (걸어서 약 ${mins}분)` : ""}`;
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "환한길 · 밤길 안심 경로", text, url });
+        return "shared";
+      } catch (e) {
+        // 사용자가 공유창을 닫은 경우는 실패로 보지 않음
+        if ((e as Error).name === "AbortError") return "shared";
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      return "copied";
+    } catch {
+      return "failed";
+    }
   };
 
   const startNav = () => {
@@ -595,7 +636,13 @@ export default function MapApp() {
               {!graph && <p className="mt-3 text-xs text-muted">길 데이터를 불러오는 중…</p>}
               {routes?.failed && <p className="mt-3 text-sm text-danger">두 지점을 잇는 길을 찾지 못했어요.</p>}
               {routes && routes.safe && routes.short && (
-                <RouteResult safe={routes.safe} short={routes.short} same={routes.same} onStart={startNav} />
+                <RouteResult
+                  safe={routes.safe}
+                  short={routes.short}
+                  same={routes.same}
+                  onStart={startNav}
+                  onShare={shareRoute}
+                />
               )}
             </>
           )}
