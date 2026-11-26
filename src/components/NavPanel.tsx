@@ -84,7 +84,7 @@ export default function NavPanel({ nav, total, segment, dark, destination, onRer
             내 위치로
           </button>
         )}
-        <a href="tel:112" className="rounded-xl bg-danger px-4 py-2.5 text-sm font-bold text-white">
+        <a href="tel:112" className="rounded-xl bg-sos px-4 py-2.5 text-sm font-bold text-white">
           112
         </a>
         {onSafe && !nav.arrived && (

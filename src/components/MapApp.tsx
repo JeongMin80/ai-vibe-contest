@@ -533,24 +533,6 @@ export default function MapApp() {
 
   return (
     <main className="relative flex-1 min-h-dvh overflow-hidden">
-      <MapView
-        data={data}
-        graph={graph}
-        region={region}
-        visible={visible}
-        from={mode === "route" ? from : null}
-        to={mode === "route" ? to : null}
-        safe={mode === "route" ? shownSafe : null}
-        short={mode === "route" ? shownShort : null}
-        onPick={onMapPick}
-        picking={(mode === "route" && picking !== null && !nav) || !!reporting?.picking}
-        reports={reports}
-        mark={reporting?.pos ?? null}
-        // 길 안내 중이거나 "가까운 안전한 곳"을 열었을 때 내 위치를 보여줌
-        me={nav?.me ?? (safe?.origin ? { ...safe.origin, acc: 20 } : null)}
-        follow={nav ? nav.follow : !!safe?.origin}
-        onUserMove={() => setNav((p) => (p && p.follow ? { ...p, follow: false } : p))}
-      />
 
       {/* 상단: 서비스 이름 / 선택 안내 */}
       <header className="pointer-events-none absolute inset-x-0 top-0 z-[1000] flex flex-col items-start gap-2 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:flex-row md:items-center">
@@ -573,7 +555,7 @@ export default function MapApp() {
                     switchRegion(r.id);
                     if (mode === "route") setPicking("from");
                   }}
-                  className={`rounded-lg px-2 py-0.5 text-xs ${r.id === regionId ? "bg-accent font-bold text-accent-ink" : "text-muted"}`}
+                  className={`rounded-lg px-2 py-1 text-xs ${r.id === regionId ? "bg-accent font-bold text-accent-ink" : "text-muted"}`}
                 >
                   {r.name}
                 </button>
@@ -673,7 +655,7 @@ export default function MapApp() {
                   setMessage(null);
                   setReporting({ pos: null, picking: false, locating: false });
                 }}
-                className="mt-2 w-full text-center text-xs text-muted underline underline-offset-2"
+                className="mt-1 w-full py-1.5 text-center text-xs text-muted underline underline-offset-2"
               >
                 ⚠ 어두운 곳·고장 난 가로등 제보하기{reports.length ? ` · 최근 ${reports.length}건` : ""}
               </button>
@@ -681,7 +663,7 @@ export default function MapApp() {
               {/* 지도 표시: 작게 */}
               <div className="mt-3 flex items-center justify-between gap-2">
                 <p className="text-[11px] text-muted">지도에 표시</p>
-                <Link href="/about" className="text-[11px] text-muted underline underline-offset-2">
+                <Link href="/about" className="-my-1 py-1 text-[11px] text-muted underline underline-offset-2">
                   데이터 안내
                 </Link>
               </div>
@@ -726,7 +708,7 @@ export default function MapApp() {
             <>
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-sm font-bold">안심 경로 찾기</p>
-                <button type="button" onClick={closeRouteMode} className="text-xs text-muted underline underline-offset-2">
+                <button type="button" onClick={closeRouteMode} className="-my-1 -mr-2 px-2 py-1.5 text-xs text-muted underline underline-offset-2">
                   닫기
                 </button>
               </div>
@@ -821,6 +803,25 @@ export default function MapApp() {
           )}
         </div>
       </section>
+      {/* 지도는 맨 뒤에 둬서 키보드(Tab)로는 위쪽 버튼과 패널부터 가도록 (화면 순서는 z-index로 정함) */}
+      <MapView
+        data={data}
+        graph={graph}
+        region={region}
+        visible={visible}
+        from={mode === "route" ? from : null}
+        to={mode === "route" ? to : null}
+        safe={mode === "route" ? shownSafe : null}
+        short={mode === "route" ? shownShort : null}
+        onPick={onMapPick}
+        picking={(mode === "route" && picking !== null && !nav) || !!reporting?.picking}
+        reports={reports}
+        mark={reporting?.pos ?? null}
+        // 길 안내 중이거나 "가까운 안전한 곳"을 열었을 때 내 위치를 보여줌
+        me={nav?.me ?? (safe?.origin ? { ...safe.origin, acc: 20 } : null)}
+        follow={nav ? nav.follow : !!safe?.origin}
+        onUserMove={() => setNav((p) => (p && p.follow ? { ...p, follow: false } : p))}
+      />
     </main>
   );
 }

@@ -42,7 +42,7 @@ export default function ReportPanel({ pos, picking, locating, onPickOnMap, onLoc
     <div>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-sm font-bold">어두운 곳·고장 제보</p>
-        <button type="button" onClick={() => onDone(false)} className="text-xs text-muted underline underline-offset-2">
+        <button type="button" onClick={() => onDone(false)} className="-my-1 -mr-2 px-2 py-1.5 text-xs text-muted underline underline-offset-2">
           닫기
         </button>
       </div>

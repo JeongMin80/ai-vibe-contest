@@ -76,7 +76,7 @@ export default function MyPlaces({ places, campuses, target, onPick, onRemove, o
       </div>
 
       {target && !editing && (
-        <button type="button" onClick={openSave} className="mt-2 text-xs text-accent underline underline-offset-2">
+        <button type="button" onClick={openSave} className="mt-1 py-1.5 text-xs text-accent underline underline-offset-2">
           ★ {target.field === "to" ? "도착지" : "출발지"}를 내 장소로 저장
         </button>
       )}

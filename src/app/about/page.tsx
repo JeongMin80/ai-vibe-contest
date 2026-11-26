@@ -43,7 +43,7 @@ const SOURCES = [
 export default function AboutPage() {
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-8 pb-16">
-      <Link href="/" className="text-sm text-muted underline underline-offset-2">
+      <Link href="/" className="inline-block py-1 text-sm text-muted underline underline-offset-2">
         ← 지도로 돌아가기
       </Link>
       <h1 className="mt-4 text-2xl font-bold">데이터 안내</h1>

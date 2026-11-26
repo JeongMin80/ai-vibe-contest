@@ -134,7 +134,7 @@ export default function RouteResult({ safe, short, same, onStart, onShare }: Pro
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
         <p className="text-[11px] leading-snug text-muted">안전 점수는 공공 안전시설 기준 참고 지표예요.</p>
-        <a href="tel:112" className="shrink-0 rounded-xl bg-danger px-3 py-2 text-xs font-bold text-white">
+        <a href="tel:112" className="shrink-0 rounded-xl bg-sos px-3 py-2 text-xs font-bold text-white">
           112 신고
         </a>
       </div>

@@ -366,5 +366,5 @@ export default function MapView({ data, graph, region, visible, from, to, safe, 
     });
   }, [safe, short]);
 
-  return <div ref={containerRef} className="absolute inset-0" aria-label="안전시설과 경로 지도" role="application" />;
+  return <div ref={containerRef} className="absolute inset-0 z-0" aria-label="안전시설과 경로 지도" role="application" />;
 }

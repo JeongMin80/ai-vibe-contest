@@ -117,7 +117,7 @@ export default function PlaceField({ field, label, active, locating, onFocus, on
             if (e.key === "Enter" && results[0]) choose(results[0]);
             if (e.key === "Escape") inputRef.current?.blur();
           }}
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
+          className="min-w-0 flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-muted"
         />
         <button
           type="button"

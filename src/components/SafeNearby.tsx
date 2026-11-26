@@ -87,12 +87,12 @@ export default function SafeNearby({ origin, locating, error, data, onRoute, onC
     <div>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-sm font-bold">가까운 안전한 곳</p>
-        <button type="button" onClick={onClose} className="text-xs text-muted underline underline-offset-2">
+        <button type="button" onClick={onClose} className="-my-1 -mr-2 px-2 py-1.5 text-xs text-muted underline underline-offset-2">
           닫기
         </button>
       </div>
 
-      <a href="tel:112" className="mb-3 flex items-center justify-center gap-2 rounded-2xl bg-danger py-3 text-base font-bold text-white">
+      <a href="tel:112" className="mb-3 flex items-center justify-center gap-2 rounded-2xl bg-sos py-3 text-base font-bold text-white">
         📞 위급하면 112에 바로 전화
       </a>
 
