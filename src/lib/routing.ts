@@ -385,3 +385,22 @@ export function scoreLabel(score: number) {
   if (score >= DARK_SCORE) return "보통";
   return "어두운 편";
 }
+
+/**
+ * 안심 경로가 최단 경로보다 나은 점 중 가장 큰 것 하나 (결과 요약 문장용).
+ * 어두운 길이 줄지 않았는데 "어두운 길을 0m 줄여요"라고 말하지 않도록, 실제로 나아진 것을 고릅니다.
+ */
+export function routeGain(safe: Route, short: Route): string {
+  const m = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}km` : `${Math.round(v / 10) * 10}m`);
+  const lessDark = short.darkLength - safe.darkLength;
+  if (lessDark >= 10) return `어두운 길을 ${m(lessDark)} 줄여요`;
+  const lessTrail = short.trailLength - safe.trailLength;
+  if (lessTrail >= 10) return `어두운 산길·공원길 ${m(lessTrail)}을 피해요`;
+  const moreCctv = Math.round((safe.cctvShare - short.cctvShare) * 100);
+  if (moreCctv >= 5) return `CCTV 근처 길이 ${moreCctv}%p 늘어요`;
+  const moreLit = Math.round((safe.litShare - short.litShare) * 100);
+  if (moreLit >= 5) return `조명 있는 길이 ${moreLit}%p 늘어요`;
+  const moreScore = Math.round(safe.score - short.score);
+  if (moreScore >= 1) return `안전 점수가 ${moreScore}점 높아요`;
+  return "더 밝은 길로 가요";
+}

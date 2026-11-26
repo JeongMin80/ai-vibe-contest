@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { scoreLabel, type Route } from "@/lib/routing";
+import { routeGain, scoreLabel, type Route } from "@/lib/routing";
 
 interface Props {
   safe: Route;
@@ -71,7 +71,6 @@ export default function RouteResult({ safe, short, same, onStart, onShare }: Pro
     setTimeout(() => setShareState("idle"), 2500);
   };
   const extraMin = safe.minutes - short.minutes;
-  const lessDark = short.darkLength - safe.darkLength;
   const darkest = safe.darkStretches[0];
 
   return (
@@ -82,8 +81,7 @@ export default function RouteResult({ safe, short, same, onStart, onShare }: Pro
         </p>
       ) : (
         <p className="mb-2 rounded-xl bg-accent/15 px-3 py-2 text-sm">
-          <b className="text-accent">{extraMin > 0 ? `${extraMin}분 더 걷고` : "거의 같은 시간에"}</b>, 어두운 길을{" "}
-          <b className="text-accent">{meters(Math.max(0, lessDark))}</b> 줄여요.
+          <b className="text-accent">{extraMin > 0 ? `${extraMin}분 더 걷고` : "거의 같은 시간에"}</b>, {routeGain(safe, short)}.
         </p>
       )}
 

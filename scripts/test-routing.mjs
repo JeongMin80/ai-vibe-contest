@@ -1,7 +1,7 @@
 // 경로 계산 점검: 실제 그래프로 여러 출발·도착 쌍을 계산해 최단 경로와 안심 경로를 비교합니다.
 // 실행: node --experimental-strip-types scripts/test-routing.mjs
 import { readFileSync } from "node:fs";
-import { buildGraph, findRoute, nearestNode, sameRoute, edgeCost } from "../src/lib/routing.ts";
+import { buildGraph, findRoute, nearestNode, sameRoute, edgeCost, routeGain } from "../src/lib/routing.ts";
 
 const raw = JSON.parse(readFileSync(new URL("../public/data/jeonju/graph.json", import.meta.url), "utf8"));
 const t0 = performance.now();
@@ -64,6 +64,18 @@ for (const [name, A, B] of PAIRS) {
       `   안심: ${safe.length}m ${safe.minutes}분 · 점수 ${safe.score} · CCTV구간 ${pct(safe.cctvShare)} · 어두운 ${safe.darkLength}m` +
       (sameRoute(short, safe) ? "  (같은 경로)" : `  (+${safe.length - short.length}m)`)
   );
+}
+
+// 결과 요약 문장: 실제로 나아진 점을 말하는지 (어두운 길이 안 줄었는데 "0m 줄여요"라고 하지 않기)
+{
+  const base = { darkLength: 100, trailLength: 0, cctvShare: 0.4, litShare: 0.6, score: 55 };
+  const g = (safe) => routeGain({ ...base, ...safe }, base);
+  check(g({ darkLength: 20 }) === "어두운 길을 80m 줄여요", "요약: 어두운 길 감소");
+  check(g({ cctvShare: 0.52 }) === "CCTV 근처 길이 12%p 늘어요", "요약: 어두운 길이 같으면 CCTV 증가");
+  check(g({ litShare: 0.7 }) === "조명 있는 길이 10%p 늘어요", "요약: 조명 증가");
+  check(g({ score: 58 }) === "안전 점수가 3점 높아요", "요약: 점수만 높을 때");
+  check(!g({}).includes("0m"), "요약: 나아진 게 없어도 0m라고 하지 않음");
+  check(routeGain({ ...base }, { ...base, trailLength: 300 }) === "어두운 산길·공원길 300m을 피해요", "요약: 산길 회피");
 }
 
 console.log(failures ? `\n실패 ${failures}건` : "\n✅ 모든 점검 통과");
