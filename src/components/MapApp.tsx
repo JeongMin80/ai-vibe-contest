@@ -532,10 +532,12 @@ export default function MapApp() {
   };
 
   /** 휴대폰이면 공유창(카카오톡·문자 등), 아니면 복사 */
-  const sendShare = async (text: string, url?: string): Promise<"shared" | "copied" | "failed"> => {
+  // inline: 링크를 글 안에 붙여서 보냄. 아이폰에서 카카오톡 등으로 보낼 때 글과 링크를 따로 주면
+  // 글이 빠지고 링크만 가는 경우가 있어, 문장이 중요한 가족 알림은 이렇게 보냅니다
+  const sendShare = async (text: string, url?: string, inline = false): Promise<"shared" | "copied" | "failed"> => {
     if (typeof navigator.share === "function") {
       try {
-        await navigator.share(url ? { title: "환한길 · 밤길 안심 경로", text, url } : { text });
+        await navigator.share(url && !inline ? { title: "환한길 · 밤길 안심 경로", text, url } : { text: url ? `${text}\n${url}` : text });
         return "shared";
       } catch (e) {
         // 사용자가 공유창을 닫은 경우는 실패로 보지 않음
@@ -567,9 +569,9 @@ ${url}` : text);
       // 지금 위치 링크: 받는 사람이 열면 그 위치까지 안심 경로가 보임
       const me = nav?.me;
       const here = me ? `${window.location.origin}/?${encodeShare({ to: { lat: me.lat, lng: me.lng, label: "친구의 지금 위치" } })}` : routeUrl();
-      return sendShare(lateText(dest), here);
+      return sendShare(lateText(dest), here, true);
     }
-    return kind === "depart" ? sendShare(departText(dest, minutes), routeUrl()) : sendShare(arriveText(dest));
+    return kind === "depart" ? sendShare(departText(dest, minutes), routeUrl(), true) : sendShare(arriveText(dest));
   };
 
   const startNav = () => {
